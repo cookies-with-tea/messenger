@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  /* Fonts */
+  --font-syne: "Syne", sans-serif;
+  --font-mono: "DM Mono", monospace;
+
+  /* Colors — в формате rgb() чтобы работали opacity-модификаторы (/10, /50 и т.д.) */
+  --color-void:        rgb(8, 10, 15);
+  --color-abyss:       rgb(13, 16, 23);
+  --color-surface:     rgb(18, 22, 30);
+  --color-elevated:    rgb(26, 31, 42);
+  --color-border:      rgb(37, 43, 56);
+  --color-muted:       rgb(58, 66, 85);
+  --color-text-dim:    rgb(107, 116, 144);
+  --color-text-base:   rgb(168, 178, 204);
+  --color-text-bright: rgb(226, 232, 248);
+  --color-pulse:       rgb(79, 124, 255);
+  --color-pulse-dim:   rgb(42, 74, 204);
+  --color-pulse-glow:  rgb(107, 147, 255);
+  --color-neon:        rgb(0, 229, 255);
+  --color-neon-dim:    rgb(0, 153, 179);
+  --color-ember:       rgb(255, 107, 53);
+  --color-sage:        rgb(82, 224, 124);
+  --color-sage-dim:    rgb(42, 155, 74);
+
+  /* Box shadows */
+  --shadow-glow:        0 0 20px rgb(79 124 255 / 0.15);
+  --shadow-glow-strong: 0 0 40px rgb(79 124 255 / 0.25);
+  --shadow-neon-glow:   0 0 20px rgb(0 229 255 / 0.15);
+
+  /* Animations */
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-slide-up:   slideUp 0.3s ease-out;
+  --animate-fade-in:    fadeIn 0.2s ease-out;
+  --animate-bounce-in:  bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+  @keyframes slideUp {
+    0%   { transform: translateY(12px); opacity: 0; }
+    100% { transform: translateY(0);    opacity: 1; }
+  }
+  @keyframes fadeIn {
+    0%   { opacity: 0; }
+    100% { opacity: 1; }
+  }
+  @keyframes bounceIn {
+    0%   { transform: scale(0.8); opacity: 0; }
+    100% { transform: scale(1);   opacity: 1; }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Base
+   ───────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--color-void);
+  color: var(--color-text-base);
+  font-family: var(--font-syne);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar        { width: 4px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: var(--color-border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-muted); }
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
