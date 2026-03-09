@@ -10,7 +10,7 @@
         class="w-7 h-7 rounded-full bg-elevated border border-border flex items-center justify-center text-xs select-none"
         :style="{ color: senderColor }"
       >
-        {{ senderInitial }}
+      	<ChatAvatar :chat="props.message.sender" :size="28" />
       </div>
     </div>
 
@@ -56,6 +56,7 @@
 import { computed } from 'vue'
 import { useMessengerStore } from '@/stores/messengerStore'
 import type { MessageResponseDTO } from '@/types'
+import ChatAvatar from './ChatAvatar.vue'
 
 const COLOR_PALETTE = ['#4f7cff','#00e5ff','#52e07c','#ff6b35','#c084fc','#fb923c','#38bdf8','#f472b6']
 

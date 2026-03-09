@@ -1,10 +1,10 @@
 <template>
   <div class="flex items-center gap-3 px-5 py-3.5 border-b border-border bg-abyss/80 backdrop-blur-sm">
-    <ChatAvatar :chat="chat" :size="38" />
+    <ChatAvatar :chat="chat.sender" :size="38" />
 
     <div class="flex-1 min-w-0">
       <h2 class="text-sm font-syne font-bold text-text-bright truncate">
-        {{ chat.name ?? 'Chat' }}
+        {{ chat.sender.first_name ?? 'Chat' }} {{ chat.sender?.second_name ?? '' }}
       </h2>
       <p class="text-xs font-mono text-text-dim truncate">
         {{ chat.chat_type === 'group'
