@@ -33,6 +33,7 @@ pub struct CreateUserDTO {
     pub(crate) role: Option<UserRole>,
     pub(crate) status: Option<UserStatus>,
     pub(crate) avatar: Option<String>,
+    pub(crate) avatar_uuid: Option<Uuid>,
     pub(crate) street: Option<String>,
     pub(crate) city: Option<String>,
     pub(crate) gender: Option<String>,

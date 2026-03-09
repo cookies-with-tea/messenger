@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS guest_user
     city TEXT NOT NULL DEFAULT '',
     role        user_role  NOT NULL DEFAULT 'user',
     status      user_status       NOT NULL DEFAULT 'active',
+    avatar_uuid UUID REFERENCES media(uuid),
     created_at  TIMESTAMP        NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMP        NOT NULL DEFAULT NOW()
 );

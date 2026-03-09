@@ -10,7 +10,7 @@ use axum::{
 use sqlx::{PgPool, query_as};
 use uuid::Uuid;
 
-use crate::{AppState, auth::utils::get_user_from_token, core::{dto::{ApiPaginationDTO, ApiResponse, ApiResponseWithPagination, MediaDTO, PaginationDTO, PaginationQuery}, handlers::{get_media_by_uuid, get_media_by_uuids}, response::{error_map, into_api_response, into_api_response_with_pagination}}, messenger::dto::{ChatRow, UserPreviewDTO, WsQuery}};
+use crate::{AppState, auth::utils::get_user_from_token, core::{dto::{ApiPaginationDTO, ApiResponse, ApiResponseWithPagination, MediaDTO, PaginationDTO, PaginationQuery}, handlers::{get_media_by_uuid, get_media_by_uuids}, response::{error_map, into_api_response, into_api_response_with_pagination}}, messenger::dto::{ChatRow, MessageRow, UserPreviewDTO, WsQuery}};
 
 use super::{
     dto::{
@@ -38,10 +38,10 @@ async fn get_chat_response_dto(
             NULL::timestamptz AS last_message_at,
             NULL::bigint AS unread_count,
             (SELECT COUNT(*) FROM chat_member cm WHERE cm.chat_uuid = c.uuid AND cm.left_at IS NULL) AS member_count,
-            gu.uuid AS creator_uuid,
-            gu.first_name AS creator_first_name,
-            gu.second_name AS creator_second_name,
-            gu.avatar AS creator_avatar_uuid
+            gu.uuid AS sender_uuid,
+            gu.first_name AS sender_first_name,
+            gu.second_name AS sender_second_name,
+            gu.avatar_uuid AS sender_avatar_uuid
         FROM chat c
         LEFT JOIN guest_user gu ON gu.uuid = c.created_by
         WHERE c.uuid = $1
@@ -57,7 +57,7 @@ async fn get_chat_response_dto(
         Some(row) => {
             // Собираем UUID аватарок для пакетной загрузки
             let mut uuids = Vec::new();
-            if let Some(u) = row.interlocutor_avatar_uuid { uuids.push(u); }
+            if let Some(u) = row.sender_avatar_uuid { uuids.push(u); }
 
             let media_map = get_media_by_uuids(pool, uuids).await.unwrap_or_default();
             let dto = map_chat_row(row, &media_map);
@@ -72,6 +72,45 @@ async fn get_chat_response_dto(
                    };
                    Err((StatusCode::NOT_FOUND, Json(empty_response)))
                }
+    }
+}
+
+async fn map_message_row(
+    state: &Arc<AppState>,
+    row: MessageRow,
+) -> MessageResponseDTO {
+    // Загружаем аватар через вашу функцию
+    let sender_avatar = get_media_by_uuid(state, row.sender_avatar_uuid)
+        .await
+        .ok()
+        .flatten();
+
+    // Фильтруем пустые строки
+    let first_name = row.sender_first_name.filter(|s| !s.is_empty());
+    let second_name = row.sender_second_name.filter(|s| !s.is_empty());
+
+    MessageResponseDTO {
+        uuid: row.uuid,
+        chat_uuid: row.chat_uuid,
+        sender_uuid: row.sender_uuid,
+        reply_to_uuid: row.reply_to_uuid,
+        body: row.body,
+        is_edited: row.is_edited,
+        is_deleted: row.is_deleted,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+
+        // 👇 Вложенный sender
+        sender: Some(UserPreviewDTO {
+            first_name,
+            second_name,
+            avatar: sender_avatar,
+        }),
+
+        delivered_count: row.delivered_count,
+        read_count: row.read_count,
+        my_status: row.my_status,
+        reply_body_preview: row.reply_body_preview,
     }
 }
 
@@ -130,10 +169,10 @@ fn map_chat_row(
         unread_count: row.unread_count,
         member_count: row.member_count,
 
-        interlocutor: row.interlocutor_uuid.map(|_| UserPreviewDTO {
-            first_name: row.interlocutor_first_name,
-            second_name: row.interlocutor_second_name,
-            avatar: row.interlocutor_avatar_uuid.and_then(|uuid| media_map.get(&uuid).cloned()),
+        sender: row.sender_uuid.map(|_| UserPreviewDTO {
+            first_name: row.sender_first_name,
+            second_name: row.sender_second_name,
+            avatar: row.sender_avatar_uuid.and_then(|uuid| media_map.get(&uuid).cloned()),
         }),
     }
 }
@@ -201,31 +240,23 @@ pub async fn get_chats(
                 WHERE cm2.chat_uuid = c.uuid AND cm2.left_at IS NULL
             ) AS member_count,
 
-            -- 👇 Данные собеседника (второго участника)
-            cm_other.user_uuid           AS interlocutor_uuid,
-            gu.first_name                AS interlocutor_first_name,
-            gu.second_name               AS interlocutor_second_name,
-            gu.avatar                    AS interlocutor_avatar_uuid
+            -- 👇 Собеседник
+            cm_other.user_uuid              AS sender_uuid,
+            gu.first_name                   AS sender_first_name,
+            gu.second_name                  AS sender_second_name,
+            gu.avatar_uuid                       AS sender_avatar_uuid  -- 🔥 Алиас = имя поля в ChatRow
 
         FROM chat c
         JOIN chat_member cm ON cm.chat_uuid = c.uuid
-            AND cm.user_uuid = $1
-            AND cm.left_at IS NULL
-
-        -- 👈 Присоединяем ДРУГОГО участника (не $1)
+            AND cm.user_uuid = $1 AND cm.left_at IS NULL
         LEFT JOIN chat_member cm_other ON cm_other.chat_uuid = c.uuid
-            AND cm_other.user_uuid != $1
-            AND cm_other.left_at IS NULL
-
-        -- 👈 Получаем данные пользователя из guest_user
+            AND cm_other.user_uuid != $1 AND cm_other.left_at IS NULL
         LEFT JOIN guest_user gu ON gu.uuid = cm_other.user_uuid
-
         LEFT JOIN LATERAL (
             SELECT body, created_at FROM message
             WHERE chat_uuid = c.uuid AND is_deleted = FALSE
             ORDER BY created_at DESC LIMIT 1
         ) lm ON TRUE
-
         ORDER BY COALESCE(lm.created_at, c.created_at) DESC
         LIMIT $2 OFFSET $3
         "#,
@@ -238,7 +269,7 @@ pub async fn get_chats(
 
     let rows = match rows {
         Ok(r) => r,
-        Err(_) => {
+        Err(e) => {
             let msg = state.i18n.t("general.db_error", &locale).await;
             return into_api_response_with_pagination(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -253,7 +284,7 @@ pub async fn get_chats(
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
         // Загружаем аватар собеседника через вашу функцию
-        let interlocutor_avatar = get_media_by_uuid(&state, row.interlocutor_avatar_uuid)
+        let sender_avatar = get_media_by_uuid(&state, row.sender_avatar_uuid)
             .await
             .ok()
             .flatten();
@@ -272,10 +303,10 @@ pub async fn get_chats(
             unread_count: row.unread_count,
             member_count: row.member_count,
 
-            interlocutor: row.interlocutor_uuid.map(|_| UserPreviewDTO {
-                first_name: row.interlocutor_first_name,
-                second_name: row.interlocutor_second_name,
-                avatar: interlocutor_avatar,
+            sender: row.sender_uuid.map(|_| UserPreviewDTO {
+                first_name: row.sender_first_name,
+                second_name: row.sender_second_name,
+                avatar: sender_avatar,
             }),
         });
     }
@@ -332,10 +363,10 @@ pub async fn get_chat(
             (SELECT COUNT(*) FROM chat_member cm WHERE cm.chat_uuid = $1 AND cm.left_at IS NULL) AS member_count,
 
             -- 👇 Собеседник
-            cm_other.user_uuid           AS interlocutor_uuid,
-            gu.first_name                AS interlocutor_first_name,
-            gu.second_name               AS interlocutor_second_name,
-            gu.avatar                    AS interlocutor_avatar_uuid
+            cm_other.user_uuid           AS sender_uuid,
+            gu.first_name                AS sender_first_name,
+            gu.second_name               AS sender_second_name,
+            gu.avatar_uuid                    AS sender_avatar_uuid
         FROM chat c
         JOIN chat_member cm ON cm.chat_uuid = c.uuid
             AND cm.user_uuid = $1
@@ -353,7 +384,7 @@ pub async fn get_chat(
 
     match row {
       Ok(Some(row)) => {
-           let interlocutor_avatar = get_media_by_uuid(&state, row.interlocutor_avatar_uuid)
+           let sender_avatar = get_media_by_uuid(&state, row.sender_avatar_uuid)
                .await
                .ok()
                .flatten();
@@ -371,10 +402,10 @@ pub async fn get_chat(
                last_message_at: row.last_message_at,
                unread_count: row.unread_count,
                member_count: row.member_count,
-               interlocutor: row.interlocutor_uuid.map(|_| UserPreviewDTO {
-                   first_name: row.interlocutor_first_name,
-                   second_name: row.interlocutor_second_name,
-                   avatar: interlocutor_avatar,
+               sender: row.sender_uuid.map(|_| UserPreviewDTO {
+                   first_name: row.sender_first_name,
+                   second_name: row.sender_second_name,
+                   avatar: sender_avatar,
                }),
            };
 
@@ -586,14 +617,14 @@ pub async fn leave_or_delete_chat(
     }
 
     // Если создатель — удаляем чат целиком (CASCADE)
-    let is_creator: bool = sqlx::query_scalar("SELECT created_by = $2 FROM chat WHERE uuid = $1")
+    let is_sender: bool = sqlx::query_scalar("SELECT created_by = $2 FROM chat WHERE uuid = $1")
         .bind(chat_uuid)
         .bind(me)
         .fetch_one(&state.pool)
         .await
         .unwrap_or(false);
 
-    if is_creator {
+    if is_sender {
         let _ = sqlx::query("DELETE FROM chat WHERE uuid = $1").bind(chat_uuid).execute(&state.pool).await;
     } else {
         let _ = sqlx::query(
@@ -739,29 +770,20 @@ pub async fn remove_member(
 
 const MSG_SELECT: &str = r#"
     SELECT
-        m.uuid,
-        m.chat_uuid,
-        m.sender_uuid,
-        m.reply_to_uuid,
-        m.body,
-        m.is_edited,
-        m.is_deleted,
-        m.created_at,
-        m.updated_at,
-        u.first_name  AS sender_first_name,
-        u.last_name   AS sender_last_name,
-        u.avatar      AS sender_avatar,
-        (SELECT COUNT(*) FROM message_status ms
-         WHERE ms.message_uuid = m.uuid AND ms.status = 'delivered') AS delivered_count,
-        (SELECT COUNT(*) FROM message_status ms
-         WHERE ms.message_uuid = m.uuid AND ms.status = 'read')      AS read_count,
-        (SELECT ms.status FROM message_status ms
-         WHERE ms.message_uuid = m.uuid AND ms.user_uuid = $2
-         LIMIT 1)                                                     AS my_status,
-        reply.body    AS reply_body_preview
+        m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid, m.body,
+        m.is_edited, m.is_deleted, m.created_at, m.updated_at,
+        gu.first_name  AS sender_first_name,
+        gu.second_name AS sender_second_name,
+        gu.avatar_uuid      AS sender_avatar_uuid,
+        (SELECT COUNT(*) FROM message_status ms1
+            WHERE ms1.message_uuid = m.uuid AND ms1.status = 'delivered') AS delivered_count,
+        (SELECT COUNT(*) FROM message_status ms2
+            WHERE ms2.message_uuid = m.uuid AND ms2.status = 'read') AS read_count,
+        (SELECT status FROM message_status ms3
+            WHERE ms3.message_uuid = m.uuid AND ms3.user_uuid = $2 LIMIT 1) AS my_status,
+        (SELECT body FROM message m2 WHERE m2.uuid = m.reply_to_uuid LIMIT 1) AS reply_body_preview
     FROM message m
-    JOIN guest_user u    ON u.uuid    = m.sender_uuid
-    LEFT JOIN message reply ON reply.uuid = m.reply_to_uuid
+    LEFT JOIN guest_user gu ON gu.uuid = m.sender_uuid
 "#;
 
 /// История сообщений (offset или курсорная пагинация)
@@ -809,9 +831,9 @@ pub async fn get_messages(
     .await
     .unwrap_or(0);
 
+    // 👇 Загружаем плоские строки (MessageRow)
     let rows = if let Some(before) = q.before_uuid {
-        // Курсорная пагинация
-        query_as::<_, MessageResponseDTO>(&format!(
+        query_as::<_, MessageRow>(&format!(
             "{MSG_SELECT}
              WHERE m.chat_uuid = $1 AND m.is_deleted = FALSE
                AND m.created_at < (SELECT created_at FROM message WHERE uuid = $3)
@@ -825,8 +847,7 @@ pub async fn get_messages(
         .fetch_all(&state.pool)
         .await
     } else {
-        // Offset пагинация
-        query_as::<_, MessageResponseDTO>(&format!(
+        query_as::<_, MessageRow>(&format!(
             "{MSG_SELECT}
              WHERE m.chat_uuid = $1 AND m.is_deleted = FALSE
              ORDER BY m.created_at DESC
@@ -840,34 +861,74 @@ pub async fn get_messages(
         .await
     };
 
-    match rows {
-        Ok(mut items) => {
-            items.reverse(); // хронологический порядок
-            into_api_response_with_pagination(
-                StatusCode::OK,
-                Some(ApiPaginationDTO {
-                    items,
-                    pagination: PaginationDTO {
-                        page: page as i32,
-                        total: Some(total as i32),
-                        total_pages: Some((total as f64 / limit as f64).ceil() as i32),
-                        limit: Some(limit as i32),
-                    },
-                }),
-                None,
-                None,
-            )
-        }
-        Err(_) => {
+    let rows = match rows {
+        Ok(r) => r,
+        Err(e) => {
+          println!("error: {:?}", e);
             let msg = state.i18n.t("general.db_error", &locale).await;
-            into_api_response_with_pagination(
+            return into_api_response_with_pagination(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 None,
                 Some(error_map("database", &msg)),
                 Some(vec![msg]),
-            )
+            );
         }
+    };
+
+    // 👇 Конвертируем MessageRow → MessageResponseDTO
+    let mut items = Vec::with_capacity(rows.len());
+    for row in rows {
+        // Загружаем аватар отправителя через вашу функцию
+        let sender_avatar = get_media_by_uuid(&state, row.sender_avatar_uuid)
+            .await
+            .ok()
+            .flatten();
+
+        // Фильтруем пустые строки для имён
+        let first_name = row.sender_first_name.filter(|s| !s.is_empty());
+        let second_name = row.sender_second_name.filter(|s| !s.is_empty());
+
+        items.push(MessageResponseDTO {
+            uuid: row.uuid,
+            chat_uuid: row.chat_uuid,
+            sender_uuid: row.sender_uuid,
+            reply_to_uuid: row.reply_to_uuid,
+            body: row.body,
+            is_edited: row.is_edited,
+            is_deleted: row.is_deleted,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+
+            // 👇 Вложенный sender
+            sender: Some(UserPreviewDTO {
+                first_name,
+                second_name,
+                avatar: sender_avatar,
+            }),
+
+            delivered_count: row.delivered_count,
+            read_count: row.read_count,
+            my_status: row.my_status,
+            reply_body_preview: row.reply_body_preview,
+        });
     }
+
+    items.reverse();
+
+    into_api_response_with_pagination(
+        StatusCode::OK,
+        Some(ApiPaginationDTO {
+            items,
+            pagination: PaginationDTO {
+                page: page as i32,
+                total: Some(total as i32),
+                total_pages: Some((total as f64 / limit as f64).ceil() as i32),
+                limit: Some(limit as i32),
+            },
+        }),
+        None,
+        None,
+    )
 }
 
 /// Отправить сообщение (REST fallback; основной путь — WebSocket)
@@ -896,26 +957,8 @@ pub async fn send_message(
         return into_api_response(StatusCode::FORBIDDEN, None, None, Some(vec![msg]));
     }
 
-    let row = query_as::<_, MessageResponseDTO>(&format!(
-        "WITH ins AS (
-             INSERT INTO message (chat_uuid, sender_uuid, reply_to_uuid, body)
-             VALUES ($1, $2, $3, $4)
-             RETURNING *
-         )
-         {MSG_SELECT_INS}",
-        MSG_SELECT_INS = MSG_SELECT
-            .replace("FROM message m", "FROM ins m")
-            .replace("WHERE m.chat_uuid = $1 AND m.is_deleted = FALSE", ""),
-    ))
-    .bind(chat_uuid)
-    .bind(me)
-    .bind(body.reply_to_uuid)
-    .bind(&body.body)
-    .fetch_one(&state.pool)
-    .await;
-
-    // Упрощённый INSERT + SELECT
-    let row = sqlx::query_as::<_, MessageResponseDTO>(&format!(
+    // 👇 Загружаем как MessageRow (плоская структура с #[derive(FromRow)])
+    let row = sqlx::query_as::<_, MessageRow>(
         r#"WITH ins AS (
             INSERT INTO message (chat_uuid, sender_uuid, reply_to_uuid, body)
             VALUES ($1, $2, $3, $4) RETURNING *
@@ -923,17 +966,17 @@ pub async fn send_message(
         SELECT
             m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid,
             m.body, m.is_edited, m.is_deleted, m.created_at, m.updated_at,
-            u.first_name AS sender_first_name,
-            u.last_name  AS sender_last_name,
-            u.avatar     AS sender_avatar,
-            0::bigint    AS delivered_count,
-            0::bigint    AS read_count,
+            gu.first_name  AS sender_first_name,
+            gu.second_name AS sender_second_name,
+            gu.avatar_uuid      AS sender_avatar_uuid,
+            0::bigint      AS delivered_count,
+            0::bigint      AS read_count,
             NULL::delivery_status AS my_status,
-            reply.body   AS reply_body_preview
+            reply.body     AS reply_body_preview
         FROM ins m
-        JOIN guest_user u    ON u.uuid    = m.sender_uuid
+        JOIN guest_user gu ON gu.uuid = m.sender_uuid
         LEFT JOIN message reply ON reply.uuid = m.reply_to_uuid"#
-    ))
+    )
     .bind(chat_uuid)
     .bind(me)
     .bind(body.reply_to_uuid)
@@ -942,10 +985,15 @@ pub async fn send_message(
     .await;
 
     match row {
-        Ok(msg) => {
+        Ok(row) => {
+            // 👇 Маппим в финальный DTO (загружаем аватар через вашу функцию)
+            let msg = map_message_row(&state, row).await;
+
+            // Broadcast по WebSocket
             if let Some(ws) = &state.ws_state {
                 ws.broadcast(chat_uuid, WsServerEvent::NewMessage(msg.clone()));
             }
+
             into_api_response(StatusCode::CREATED, Some(msg), None, None)
         }
         Err(_) => {
@@ -962,7 +1010,9 @@ pub async fn edit_message(
     Path((chat_uuid, msg_uuid)): Path<(Uuid, Uuid)>,
     Json(body): Json<UpdateMessageDTO>,
 ) -> Result<Json<ApiResponse<MessageResponseDTO>>, (StatusCode, Json<ApiResponse<MessageResponseDTO>>)> {
-    let row = sqlx::query_as::<_, MessageResponseDTO>(
+
+    // 👇 Загружаем как MessageRow (плоская структура)
+    let row = sqlx::query_as::<_, MessageRow>(
         r#"WITH upd AS (
             UPDATE message SET body = $1, is_edited = TRUE
             WHERE uuid = $2 AND sender_uuid = $3 AND chat_uuid = $4 AND is_deleted = FALSE
@@ -971,15 +1021,15 @@ pub async fn edit_message(
         SELECT
             m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid,
             m.body, m.is_edited, m.is_deleted, m.created_at, m.updated_at,
-            u.first_name AS sender_first_name,
-            u.last_name  AS sender_last_name,
-            u.avatar     AS sender_avatar,
+            gu.first_name  AS sender_first_name,
+            gu.second_name AS sender_second_name,
+            gu.avatar_uuid      AS sender_avatar_uuid,
             (SELECT COUNT(*) FROM message_status ms WHERE ms.message_uuid = m.uuid AND ms.status = 'delivered') AS delivered_count,
             (SELECT COUNT(*) FROM message_status ms WHERE ms.message_uuid = m.uuid AND ms.status = 'read')      AS read_count,
             NULL::delivery_status AS my_status,
             NULL::text            AS reply_body_preview
         FROM upd m
-        JOIN guest_user u ON u.uuid = m.sender_uuid"#,
+        JOIN guest_user gu ON gu.uuid = m.sender_uuid"#,
     )
     .bind(&body.body)
     .bind(msg_uuid)
@@ -989,10 +1039,15 @@ pub async fn edit_message(
     .await;
 
     match row {
-        Ok(Some(msg)) => {
+        Ok(Some(row)) => {
+            // 👇 Маппим в финальный DTO
+            let msg = map_message_row(&state, row).await;
+
+            // Broadcast по WebSocket
             if let Some(ws) = &state.ws_state {
                 ws.broadcast(chat_uuid, WsServerEvent::MessageEdited(msg.clone()));
             }
+
             into_api_response(StatusCode::OK, Some(msg), None, None)
         }
         Ok(None) => {
@@ -1005,6 +1060,7 @@ pub async fn edit_message(
         }
     }
 }
+
 pub async fn delete_message(
     State(state): State<Arc<AppState>>,
     Extension(locale): Extension<String>,
@@ -1142,7 +1198,14 @@ pub async fn ws_upgrade(
      };
 
     ws.on_upgrade(move |socket| {
+      // 👇 Клонируем Arc перед использованием во вложенных замыканиях
+      let state_inner = state.clone();
+      let pool_inner = pool.clone();
+
         handle_socket(socket, chat_uuid, user_uuid, ws_state, move |chat_uuid, user_uuid, raw| {
+            let state_async = state_inner.clone();
+            let pool_async = pool_inner.clone();
+
             let pool = pool.clone();
             async move {
                 let action: WsClientAction = match serde_json::from_str(&raw) {
@@ -1157,7 +1220,8 @@ pub async fn ws_upgrade(
                 match action {
                     // ── Отправить сообщение ──────────────────────────────────
                     WsClientAction::SendMessage { body, reply_to_uuid } => {
-                        sqlx::query_as::<_, MessageResponseDTO>(
+                        // 👇 Загружаем как MessageRow, не MessageResponseDTO!
+                        let row = sqlx::query_as::<_, MessageRow>(
                             r#"WITH ins AS (
                                 INSERT INTO message (chat_uuid, sender_uuid, reply_to_uuid, body)
                                 VALUES ($1, $2, $3, $4) RETURNING *
@@ -1165,15 +1229,15 @@ pub async fn ws_upgrade(
                             SELECT
                                 m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid,
                                 m.body, m.is_edited, m.is_deleted, m.created_at, m.updated_at,
-                                u.first_name AS sender_first_name,
-                                u.last_name  AS sender_last_name,
-                                u.avatar     AS sender_avatar,
-                                0::bigint    AS delivered_count,
-                                0::bigint    AS read_count,
+                                gu.first_name  AS sender_first_name,
+                                gu.second_name AS sender_second_name,
+                                gu.avatar_uuid      AS sender_avatar_uuid,
+                                0::bigint      AS delivered_count,
+                                0::bigint      AS read_count,
                                 NULL::delivery_status AS my_status,
-                                reply.body   AS reply_body_preview
+                                reply.body     AS reply_body_preview
                             FROM ins m
-                            JOIN guest_user u    ON u.uuid    = m.sender_uuid
+                            JOIN guest_user gu ON gu.uuid = m.sender_uuid
                             LEFT JOIN message reply ON reply.uuid = m.reply_to_uuid"#,
                         )
                         .bind(chat_uuid)
@@ -1182,13 +1246,15 @@ pub async fn ws_upgrade(
                         .bind(&body)
                         .fetch_one(&pool)
                         .await
-                        .ok()
-                        .map(WsServerEvent::NewMessage)
+                        .ok()?;
+
+                               let dto = map_message_row(&state_async, row).await;
+                               Some(WsServerEvent::NewMessage(dto))
                     }
 
                     // ── Редактировать сообщение ──────────────────────────────
                     WsClientAction::EditMessage { uuid, body } => {
-                        sqlx::query_as::<_, MessageResponseDTO>(
+                        let row = sqlx::query_as::<_, MessageRow>(
                             r#"WITH upd AS (
                                 UPDATE message SET body = $1, is_edited = TRUE
                                 WHERE uuid = $2 AND sender_uuid = $3 AND is_deleted = FALSE
@@ -1197,14 +1263,14 @@ pub async fn ws_upgrade(
                             SELECT
                                 m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid,
                                 m.body, m.is_edited, m.is_deleted, m.created_at, m.updated_at,
-                                u.first_name AS sender_first_name,
-                                u.last_name  AS sender_last_name,
-                                u.avatar     AS sender_avatar,
-                                0::bigint    AS delivered_count,
-                                0::bigint    AS read_count,
+                                gu.first_name  AS sender_first_name,
+                                gu.second_name AS sender_second_name,
+                                gu.avatar_uuid      AS sender_avatar_uuid,
+                                0::bigint      AS delivered_count,
+                                0::bigint      AS read_count,
                                 NULL::delivery_status AS my_status,
-                                NULL::text   AS reply_body_preview
-                            FROM upd m JOIN guest_user u ON u.uuid = m.sender_uuid"#,
+                                NULL::text     AS reply_body_preview
+                            FROM upd m JOIN guest_user gu ON gu.uuid = m.sender_uuid"#,
                         )
                         .bind(&body)
                         .bind(uuid)
@@ -1212,8 +1278,10 @@ pub async fn ws_upgrade(
                         .fetch_optional(&pool)
                         .await
                         .ok()
-                        .flatten()
-                        .map(WsServerEvent::MessageEdited)
+                        .flatten()?;
+
+                        let dto = map_message_row(&state_async, row).await;
+                                  Some(WsServerEvent::MessageEdited(dto))
                     }
 
                     // ── Удалить сообщение ────────────────────────────────────

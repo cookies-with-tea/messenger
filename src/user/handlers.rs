@@ -153,8 +153,8 @@ async fn create(
 
     let result = sqlx::query(
         "INSERT INTO guest_user (
-            first_name, second_name, last_name, phone, birth_date, password_hash, role, status, email, avatar, street, gender, city
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+            first_name, second_name, last_name, phone, birth_date, password_hash, role, status, email, avatar, avatar_uuid, street, gender, city
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
     )
     .bind(&payload.first_name.unwrap_or_else(|| "".to_string()))
     .bind(&payload.second_name.unwrap_or_else(|| "".to_string()))
@@ -166,6 +166,7 @@ async fn create(
     .bind(&status)
     .bind(&payload.email)
     .bind(&payload.avatar.unwrap_or_else(|| "".to_string()))
+    .bind(&payload.avatar_uuid)
     .bind(&payload.street.unwrap_or_else(|| "".to_string()))
     .bind(&payload.gender.unwrap_or_else(|| "".to_string()))
     .bind(&payload.city.unwrap_or_else(|| "".to_string()))
@@ -178,6 +179,7 @@ async fn create(
             into_api_response(StatusCode::CREATED, None, None, Some(vec![msg]))
         }
         Err(_e) => {
+          println!("{:?}", _e);
             let msg = state.i18n.t("general.db_error", &locale).await;
             into_api_response(
                 StatusCode::INTERNAL_SERVER_ERROR,

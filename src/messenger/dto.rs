@@ -61,13 +61,13 @@ pub struct ChatRow {
 
     // 👇 Данные собеседника (для Direct-чатов)
     #[sqlx(default)]
-    pub interlocutor_uuid: Option<Uuid>,
+    pub sender_uuid: Option<Uuid>,
     #[sqlx(default)]
-    pub interlocutor_first_name: Option<String>,
+    pub sender_first_name: Option<String>,
     #[sqlx(default)]
-    pub interlocutor_second_name: Option<String>,
+    pub sender_second_name: Option<String>,
     #[sqlx(default)]
-    pub interlocutor_avatar_uuid: Option<Uuid>,
+    pub sender_avatar_uuid: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow, ToSchema, Clone)]
@@ -90,7 +90,7 @@ pub struct ChatResponseDTO {
     #[sqlx(default)]
     pub member_count: Option<i64>,
 
-    pub interlocutor: Option<UserPreviewDTO>,
+    pub sender: Option<UserPreviewDTO>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -115,6 +115,39 @@ pub struct UpdateChatDTO {
 // ────────────────────────────────────────────────────────────────
 // Chat member
 // ────────────────────────────────────────────────────────────────
+
+#[derive(Debug, FromRow)]
+pub struct MessageRow {
+    pub uuid: Uuid,
+    pub chat_uuid: Uuid,
+    pub sender_uuid: Uuid,
+    pub reply_to_uuid: Option<Uuid>,
+    pub body: String,
+    pub is_edited: bool,
+    pub is_deleted: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+
+    // 👇 Плоские поля из guest_user
+    #[sqlx(default)]
+    pub sender_first_name: Option<String>,
+    #[sqlx(default)]
+    pub sender_second_name: Option<String>,
+    #[sqlx(default)]
+    pub sender_avatar_uuid: Option<Uuid>, // 👈 UUID (ссылка на media)
+
+    // Статусы
+    #[sqlx(default)]
+    pub delivered_count: Option<i64>,
+    #[sqlx(default)]
+    pub read_count: Option<i64>,
+    #[sqlx(default)]
+    pub my_status: Option<DeliveryStatus>,
+
+    // Превью цитаты
+    #[sqlx(default)]
+    pub reply_body_preview: Option<String>,
+}
 
 #[derive(Debug, Serialize, Deserialize, FromRow, ToSchema, Clone)]
 pub struct ChatMemberDTO {
@@ -146,32 +179,29 @@ pub struct AddMemberDTO {
 
 #[derive(Debug, Serialize, Deserialize, FromRow, ToSchema, Clone)]
 pub struct MessageResponseDTO {
-    pub uuid: Uuid,
-    pub chat_uuid: Uuid,
-    pub sender_uuid: Uuid,
-    pub reply_to_uuid: Option<Uuid>,
-    pub body: String,
-    pub is_edited: bool,
-    pub is_deleted: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    // из JOIN guest_user
-    #[sqlx(default)]
-    pub sender_first_name: Option<String>,
-    #[sqlx(default)]
-    pub sender_last_name: Option<String>,
-    #[sqlx(default)]
-    pub sender_avatar: Option<String>,
-    // статусы
-    #[sqlx(default)]
-    pub delivered_count: Option<i64>,
-    #[sqlx(default)]
-    pub read_count: Option<i64>,
-    #[sqlx(default)]
-    pub my_status: Option<DeliveryStatus>,
-    // превью цитируемого
-    #[sqlx(default)]
-    pub reply_body_preview: Option<String>,
+  pub uuid: Uuid,
+  pub chat_uuid: Uuid,
+  pub sender_uuid: Uuid,
+  pub reply_to_uuid: Option<Uuid>,
+  pub body: String,
+  pub is_edited: bool,
+  pub is_deleted: bool,
+  pub created_at: DateTime<Utc>,
+  pub updated_at: DateTime<Utc>,
+
+  // 👇 Вложенный sender вместо плоских полей
+  pub sender: Option<UserPreviewDTO>,
+
+  // статусы
+  #[sqlx(default)]
+  pub delivered_count: Option<i64>,
+  #[sqlx(default)]
+  pub read_count: Option<i64>,
+  #[sqlx(default)]
+  pub my_status: Option<DeliveryStatus>,
+  // превью цитируемого
+  #[sqlx(default)]
+  pub reply_body_preview: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
