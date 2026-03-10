@@ -13,6 +13,11 @@ export interface UserPreviewDTO {
   last_seen_at: string
 }
 
+export interface ReactionDTO {
+  user_uuid: string
+  emoji: string
+}
+
 export interface UserResponseDTO {
   uuid: string
   first_name: string | null
@@ -77,6 +82,7 @@ export interface MessageResponseDTO {
   my_status: DeliveryStatus | null
   reply_body_preview: string | null
   media: { url: string; media_type: string; uuid: string; title?: string } | null
+  reactions: ReactionDTO[]
 }
 
 // ─── API wrappers ─────────────────────────────────────────────────
@@ -107,6 +113,7 @@ export type WsServerEvent =
   | { event: 'member_joined';   payload: ChatMemberDTO }
   | { event: 'member_left';     payload: { chat_uuid: string; user_uuid: string } }
   | { event: 'user_status_changed'; payload: { user_uuid: string; is_online: boolean; last_seen_at: string } }
+  | { event: 'message_reaction_updated'; payload: { chat_uuid: string; message_uuid: string; user_uuid: string; emoji: string; is_added: boolean } }
   | { event: 'error';           payload: { message: string } }
   | { event: 'pong' }
   // ── WebRTC Signaling ──
@@ -124,3 +131,4 @@ export type WsClientAction =
   | { action: 'mark_delivered'; payload: { chat_uuid: string } }
   | { action: 'mark_read';      payload: { chat_uuid: string } }
   | { action: 'typing';         payload: { is_typing: boolean } }
+  | { action: 'react_to_message'; payload: { chat_uuid: string; message_uuid: string; emoji: string } }

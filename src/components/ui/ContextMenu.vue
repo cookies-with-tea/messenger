@@ -10,11 +10,15 @@ interface MenuItem {
 
 const props = defineProps<{
   items: MenuItem[];
+  emojis?: string[];
   x: number;
   y: number;
 }>();
 
-const emit = defineEmits(['close']);
+const emit = defineEmits<{
+  (e: 'close'): void;
+  (e: 'emoji', emoji: string): void;
+}>();
 
 const menuRef = ref<HTMLElement | null>(null);
 
@@ -26,7 +30,6 @@ const handleClickOutside = (event: MouseEvent) => {
 
 onMounted(() => {
   document.addEventListener('mousedown', handleClickOutside);
-  // Prevent menu from going off-screen
   if (menuRef.value) {
     const rect = menuRef.value.getBoundingClientRect();
     const screenWidth = window.innerWidth;
@@ -50,10 +53,23 @@ onUnmounted(() => {
   <div
     ref="menuRef"
     class="fixed z-[9999] min-w-[160px] py-1 glass-heavy rounded-xl border border-white/10 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100"
-    :style="{ left: `${x}px`, top: `${y}px` }"
+    :style="{ left: `${props.x}px`, top: `${props.y}px` }"
   >
+    <!-- Emoji Bar -->
+    <div v-if="props.emojis?.length" class="flex gap-1 px-2 py-2 border-b border-white/5 bg-white/2">
+      <button 
+        v-for="e in props.emojis" 
+        :key="e"
+        @click="emit('emoji', e); emit('close')"
+        class="w-8 h-8 flex items-center justify-center hover:bg-white/10 rounded-lg transition-colors text-lg"
+      >
+        {{ e }}
+      </button>
+    </div>
+
+    <!-- Menu Items -->
     <button
-      v-for="(item, index) in items"
+      v-for="(item, index) in props.items"
       :key="index"
       @click="item.action(); emit('close')"
       class="w-full flex items-center px-4 py-2 text-sm transition-colors group relative overflow-hidden"

@@ -64,6 +64,14 @@ const displayName = computed(() => {
 })
 
 const statusText = computed(() => {
+  const typing = store.typingUsersFor(props.chat.uuid)
+  if (typing.length > 0) {
+    if (props.chat.chat_type === 'direct') return 'Typing...'
+    // For groups, we might want names, but we only have UUIDs in typingMap 
+    // unless we look them up in members. For now, simple count or "Someone is typing"
+    return typing.length === 1 ? 'Someone is typing...' : `${typing.length} people are typing...`
+  }
+
   if (props.chat.chat_type === 'group') {
     return `${props.chat.member_count ?? '?'} members`
   }
@@ -73,6 +81,8 @@ const statusText = computed(() => {
 })
 
 const statusColorClass = computed(() => {
+  const typing = store.typingUsersFor(props.chat.uuid)
+  if (typing.length > 0) return 'text-sage font-bold italic'
   return props.chat.sender?.is_online ? 'text-sage' : 'text-text-dim'
 })
 

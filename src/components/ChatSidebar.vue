@@ -1,3 +1,41 @@
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import { useMessengerStore } from '@/stores/messengerStore'
+import ChatListItem from './ChatListItem.vue'
+import NewChatModal from './NewChatModal.vue'
+import BaseModal from './ui/BaseModal.vue'
+import { useRouter } from 'vue-router'
+
+const messenger = useMessengerStore()
+const router = useRouter()
+
+const modalOpen = ref(false)
+const logoutModalOpen = ref(false)
+const search = ref('')
+
+const filteredChats = computed(() => {
+  const q = search.value.toLowerCase().trim()
+  if (!q) return messenger.chats
+  return messenger.chats.filter(c =>
+    (c.name ?? '').toLowerCase().includes(q) ||
+    (c.last_message_body ?? '').toLowerCase().includes(q)
+  )
+})
+
+const selectChat = (uuid: string) => {
+	messenger.selectChat(uuid)
+
+	if (router.currentRoute.value.path !== `/chat/${uuid}`) {
+		router.push(`/chat/${uuid}`);
+	}
+}
+
+const confirmLogout = () => {
+  messenger.logout()
+  logoutModalOpen.value = false
+}
+</script>
+
 <template>
   <aside class="flex flex-col h-full glass border-r border-white/10 w-full relative z-10">
     <!-- Header -->
@@ -37,7 +75,7 @@
 
     <!-- Chat list -->
     <div class="flex-1 overflow-y-auto py-2 px-1.5 sm:px-2 space-y-0.5 sm:space-y-1 scrollbar-thin">
-      <div v-if="store.chatsLoading" class="flex justify-center py-12">
+      <div v-if="messenger.chatsLoading" class="flex justify-center py-12">
         <span class="text-xs font-mono text-muted animate-pulse">Scanning...</span>
       </div>
       <template v-else-if="filteredChats.length">
@@ -45,7 +83,7 @@
           v-for="chat in filteredChats"
           :key="chat.uuid"
           :chat="chat"
-          :active="chat.uuid === store.activeChatId"
+          :active="chat.uuid === messenger.activeChatId"
           @select="selectChat(chat.uuid)"
         />
       </template>
@@ -59,19 +97,19 @@
     <div class="p-3 sm:p-4 border-t border-white/5 bg-white/1">
       <div class="flex items-center gap-2.5 sm:gap-3 p-2 sm:p-2.5 rounded-2xl glass border border-white/10 group hover:border-white/20 transition-all backdrop-blur-xl">
         <div class="relative shrink-0">
-          <div v-if="store.currentUserProfile?.avatar" class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center group-hover:scale-105 transition-transform">
-            <img :src="store.currentUserProfile.avatar" class="w-full h-full object-cover" :alt="store.currentUserProfile.first_name || 'User'" />
+          <div v-if="messenger.currentUserProfile?.avatar" class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center group-hover:scale-105 transition-transform">
+            <img :src="messenger.currentUserProfile.avatar" class="w-full h-full object-cover" :alt="messenger.currentUserProfile.first_name || 'User'" />
           </div>
           <div v-else class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-linear-to-br from-pulse/30 to-pulse/5 flex items-center justify-center border border-pulse/30 text-pulse font-bold text-xs sm:text-sm shadow-[0_0_20px_rgba(var(--color-pulse),0.1)] group-hover:scale-105 transition-transform">
-            {{ (store.currentUserProfile?.first_name || 'U').slice(0, 1).toUpperCase() }}
+            {{ (messenger.currentUserProfile?.first_name || 'U').slice(0, 1).toUpperCase() }}
           </div>
-          <div class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-sage rounded-full border-[2px] sm:border-[3px] border-abyss shadow-[0_0_10px_rgba(var(--color-sage),0.5)]"></div>
+          <div class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-sage rounded-full border-2 sm:border-3 border-abyss shadow-[0_0_10px_rgba(var(--color-sage),0.5)]"></div>
         </div>
         
         <div class="flex-1 min-w-0">
           <div class="text-[8px] sm:text-[9px] font-mono text-muted uppercase tracking-wider mb-0.5">Host</div>
           <div class="text-[11px] sm:text-xs font-mono text-text-bright truncate font-bold uppercase tracking-tight">
-            {{ store.currentUserProfile ? `${store.currentUserProfile.first_name || ''} ${store.currentUserProfile.second_name || ''}`.trim() : 'Scanning...' }}
+            {{ messenger.currentUserProfile ? `${messenger.currentUserProfile.first_name || ''} ${messenger.currentUserProfile.second_name || ''}`.trim() : 'Scanning...' }}
           </div>
         </div>
 
@@ -117,41 +155,3 @@
     </BaseModal>
   </aside>
 </template>
-
-<script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useMessengerStore } from '@/stores/messengerStore'
-import ChatListItem from './ChatListItem.vue'
-import NewChatModal from './NewChatModal.vue'
-import BaseModal from './ui/BaseModal.vue'
-import { useRouter } from 'vue-router'
-
-const store  = useMessengerStore()
-const router = useRouter()
-
-const modalOpen = ref(false)
-const logoutModalOpen = ref(false)
-const search = ref('')
-
-const filteredChats = computed(() => {
-  const q = search.value.toLowerCase().trim()
-  if (!q) return store.chats
-  return store.chats.filter(c =>
-    (c.name ?? '').toLowerCase().includes(q) ||
-    (c.last_message_body ?? '').toLowerCase().includes(q)
-  )
-})
-
-const selectChat = (uuid: string) => {
-	store.selectChat(uuid)
-
-	if (router.currentRoute.value.path !== `/chat/${uuid}`) {
-		router.push(`/chat/${uuid}`);
-	}
-}
-
-const confirmLogout = () => {
-  store.logout()
-  logoutModalOpen.value = false
-}
-</script>

@@ -136,6 +136,12 @@ export const useMessengerStore = defineStore("messenger", () => {
 					break;
 				}
 
+				case "message_reaction_updated": {
+					const { chat_uuid, message_uuid, user_uuid, emoji, is_added } = ev.payload;
+					_updateReaction(chat_uuid, message_uuid, user_uuid, emoji, is_added);
+					break;
+				}
+
 				// ─── WebRTC Signaling ───
 				case "call_offer": {
 					import("./callStore").then(({ useCallStore }) => {
@@ -371,6 +377,16 @@ export const useMessengerStore = defineStore("messenger", () => {
 		}));
 	}
 
+	function sendReaction(msgUuid: string, emoji: string) {
+		const chatUuid = activeChatId.value;
+		if (!chatUuid) return;
+
+		send(JSON.stringify({
+			action: "react_to_message",
+			payload: { chat_uuid: chatUuid, message_uuid: msgUuid, emoji },
+		}));
+	}
+
 	// ─── Typing events ────────────────────────────────────────────────
 	function sendTyping(isTyping: boolean) {
 		const chatUuid = activeChatId.value;
@@ -460,6 +476,28 @@ export const useMessengerStore = defineStore("messenger", () => {
 			chatUuid,
 			list.filter((m) => m.uuid !== msgUuid),
 		);
+	}
+
+	function _updateReaction(chatUuid: string, msgUuid: string, userUuid: string, emoji: string, isAdded: boolean) {
+		const list = messages.value.get(chatUuid);
+		if (!list) return;
+
+		const msg = list.find((m) => m.uuid === msgUuid);
+		if (!msg) return;
+
+		if (!msg.reactions) msg.reactions = [];
+
+		if (isAdded) {
+			// Добавляем если нет
+			if (!msg.reactions.find((r) => r.user_uuid === userUuid && r.emoji === emoji)) {
+				msg.reactions.push({ user_uuid: userUuid, emoji });
+			}
+		} else {
+			// Удаляем
+			msg.reactions = msg.reactions.filter((r) => !(r.user_uuid === userUuid && r.emoji === emoji));
+		}
+		
+		messages.value.set(chatUuid, [...list]);
 	}
 
 	async function _bumpChat(chatUuid: string, lastBody: string, lastAt: string) {
@@ -567,6 +605,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 		sendTyping,
 		markRead,
 		markDelivered,
+		sendReaction,
 		logout,
 		sendRawWsMessage,
 	};
