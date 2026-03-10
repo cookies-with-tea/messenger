@@ -130,6 +130,22 @@ export const userApi = {
 	},
 };
 
+// ─── Media ────────────────────────────────────────────────────────
+export const mediaApi = {
+	upload: (file: File | Blob, title?: string, alt?: string) => {
+		const fd = new FormData();
+		fd.append("file", file);
+		if (title) fd.append("title", title);
+		if (alt) fd.append("alt", alt);
+
+		return fetch(`${BASE}/api/v1/media`, {
+			method: "POST",
+			headers: { ...authHeaders() },
+			body: fd,
+		}).then((res) => res.json() as Promise<ApiResponse<{ uuid: string; url: string }>>);
+	},
+};
+
 // ─── Auth ─────────────────────────────────────────────────────────
 export interface AuthResponseDTO {
 	access_token: string;

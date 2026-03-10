@@ -37,7 +37,11 @@
         class="relative px-3.5 py-2 rounded-2xl transition-all duration-200"
         :class="[bubbleClass, { 'shadow-glow': isOwn }]"
       >
-        <p class="text-sm leading-relaxed break-words whitespace-pre-wrap" :class="textClass">
+        <VoiceMessage 
+          v-if="message.media?.media_type === 'audio'" 
+          :src="message.media.url"
+        />
+        <p v-else class="text-sm leading-relaxed break-words whitespace-pre-wrap" :class="textClass">
           {{ message.is_deleted ? 'Message deleted' : message.body }}
         </p>
         <span v-if="message.is_edited && !message.is_deleted" class="text-[10px] text-white/50 ml-1">edited</span>
@@ -72,6 +76,7 @@ import { computed } from 'vue'
 import { useMessengerStore } from '@/stores/messengerStore'
 import type { MessageResponseDTO } from '@/types'
 import ChatAvatar from './ChatAvatar.vue'
+import VoiceMessage from './VoiceMessage.vue'
 
 const COLOR_PALETTE = ['#4f7cff','#00e5ff','#52e07c','#ff6b35','#c084fc','#fb923c','#38bdf8','#f472b6']
 

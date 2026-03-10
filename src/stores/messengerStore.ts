@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import { ref, computed, watch } from "vue";
 import { useWebSocket } from "@vueuse/core";
 import type { ChatResponseDTO, ChatMemberDTO, MessageResponseDTO, DeliveryStatus, WsServerEvent } from "@/types";
-import { chatApi, messageApi, wsUserUrl, tokenStore } from "@/api";
+import { chatApi, messageApi, mediaApi, wsUserUrl, tokenStore } from "@/api";
 import { useRouter } from "vue-router";
 
 // UUID текущего пользователя — берётся из JWT payload
@@ -277,16 +277,33 @@ export const useMessengerStore = defineStore("messenger", () => {
 		_performSend(chatUuid, body, replyToUuid);
 	}
 
-	function _performSend(chatUuid: string, body: string, replyToUuid?: string) {
-		console.debug("[WS:Send]", { chatUuid, body });
+	function _performSend(chatUuid: string, body: string, replyToUuid?: string, mediaUuid?: string) {
+		console.debug("[WS:Send]", { chatUuid, body, mediaUuid });
 		send(JSON.stringify({
 			action: "send_message",
 			payload: {
 				chat_uuid: chatUuid,
 				body: body.trim(),
 				reply_to_uuid: replyToUuid ?? null,
+				media_uuid: mediaUuid ?? null,
 			},
 		}));
+	}
+
+	async function sendVoiceMessage(blob: Blob, replyToUuid?: string) {
+		const chatUuid = activeChatId.value;
+		if (!chatUuid) return;
+
+		try {
+			// 1. Upload
+			const res = await mediaApi.upload(blob, "voice_message.webm");
+			if (res.data?.uuid) {
+				// 2. Send via WS
+				_performSend(chatUuid, "[Voice Message]", replyToUuid, res.data.uuid);
+			}
+		} catch (e) {
+			console.error("[VoiceMessage] Failed to upload/send:", e);
+		}
 	}
 
 	// ─── Edit message ─────────────────────────────────────────────────
@@ -495,6 +512,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 		fetchMessages,
 		selectChat,
 		sendMessage,
+		sendVoiceMessage,
 		editMessage,
 		deleteMessage,
 		sendTyping,

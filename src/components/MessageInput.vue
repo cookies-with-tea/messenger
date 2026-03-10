@@ -40,8 +40,16 @@
       />
     </div>
 
+    <!-- Voice Recorder -->
+    <VoiceRecorder 
+      v-if="!text.trim()"
+      @send="handleVoiceSend"
+      class="shrink-0"
+    />
+
     <!-- Send button -->
     <button
+      v-else
       @click="submit"
       :disabled="!text.trim()"
       class="shrink-0 p-2.5 rounded-xl transition-all duration-200"
@@ -58,6 +66,10 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
+import { useMessengerStore } from '@/stores/messengerStore'
+import VoiceRecorder from './VoiceRecorder.vue'
+
+const messenger = useMessengerStore()
 
 const EMOJIS = ['😀','😂','🥹','😎','🤔','🚀','💡','🔥','❤️','👍','👎','🎉','⚡','🌊','🎮','🎨','💻','🤖','👾','⭐','✨','🎯','📱','🏆']
 
@@ -105,6 +117,10 @@ function insertEmoji(emoji: string) {
   text.value += emoji
   showEmoji.value = false
   nextTick(() => inputRef.value?.focus())
+}
+
+function handleVoiceSend(blob: Blob) {
+  messenger.sendVoiceMessage(blob)
 }
 </script>
 

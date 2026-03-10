@@ -58,6 +58,7 @@ export interface MessageResponseDTO {
   read_count: number | null
   my_status: DeliveryStatus | null
   reply_body_preview: string | null
+  media: { url: string; media_type: string; uuid: string } | null
 }
 
 // ─── API wrappers ─────────────────────────────────────────────────
@@ -90,10 +91,16 @@ export type WsServerEvent =
   | { event: 'user_status_changed'; payload: { user_uuid: string; is_online: boolean; last_seen_at: string } }
   | { event: 'error';           payload: { message: string } }
   | { event: 'pong' }
+  // ── WebRTC Signaling ──
+  | { event: 'call_offer';    payload: { chat_uuid: string; caller_uuid: string; sdp: string } }
+  | { event: 'call_answer';   payload: { chat_uuid: string; responder_uuid: string; sdp: string } }
+  | { event: 'ice_candidate'; payload: { chat_uuid: string; sender_uuid: string; candidate: string; sdp_mid: string | null; sdp_m_line_index: number | null } }
+  | { event: 'call_reject';   payload: { chat_uuid: string; user_uuid: string } }
+  | { event: 'call_end';      payload: { chat_uuid: string; user_uuid: string } }
 
 // ─── WebSocket (клиент → сервер) ──────────────────────────────────
 export type WsClientAction =
-  | { action: 'send_message';   payload: { body: string; reply_to_uuid: string | null } }
+  | { action: 'send_message';   payload: { chat_uuid: string; body: string; reply_to_uuid: string | null; media_uuid?: string | null } }
   | { action: 'edit_message';   payload: { uuid: string; body: string } }
   | { action: 'delete_message'; payload: { uuid: string } }
   | { action: 'mark_delivered'; payload: { chat_uuid: string } }
