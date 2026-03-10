@@ -94,6 +94,9 @@ async fn map_message_row(
         .ok()
         .flatten();
 
+    // Загружаем реакции
+    let reactions = get_message_reactions(&state.pool, row.uuid).await.unwrap_or_default();
+
     // Фильтруем пустые строки
     let first_name = row.sender_first_name.filter(|s| !s.is_empty());
     let second_name = row.sender_second_name.filter(|s| !s.is_empty());
@@ -124,7 +127,45 @@ async fn map_message_row(
         my_status: row.my_status,
         reply_body_preview: row.reply_body_preview,
         media,
+        reactions,
     }
+}
+
+async fn get_message_reactions(pool: &sqlx::PgPool, message_uuid: Uuid) -> sqlx::Result<Vec<super::dto::ReactionDTO>> {
+    sqlx::query_as::<_, super::dto::ReactionDTO>(
+        "SELECT user_uuid, emoji FROM message_reaction WHERE message_uuid = $1"
+    )
+    .bind(message_uuid)
+    .fetch_all(pool)
+    .await
+}
+
+async fn handle_react_to_message(pool: &sqlx::PgPool, user_uuid: Uuid, message_uuid: Uuid, emoji: String) -> sqlx::Result<bool> {
+    // Пробуем удалить (toggle off)
+    let deleted = sqlx::query(
+        "DELETE FROM message_reaction WHERE message_uuid = $1 AND user_uuid = $2 AND emoji = $3"
+    )
+    .bind(message_uuid)
+    .bind(user_uuid)
+    .bind(&emoji)
+    .execute(pool)
+    .await?;
+
+    if deleted.rows_affected() > 0 {
+        return Ok(false); // Удалено
+    }
+
+    // Если не удалено, значит не было — добавляем
+    sqlx::query(
+        "INSERT INTO message_reaction (message_uuid, user_uuid, emoji) VALUES ($1, $2, $3)"
+    )
+    .bind(message_uuid)
+    .bind(user_uuid)
+    .bind(&emoji)
+    .execute(pool)
+    .await?;
+
+    Ok(true) // Добавлено
 }
 
 async fn assert_member(
@@ -946,49 +987,7 @@ pub async fn get_messages(
     // 👇 Конвертируем MessageRow → MessageResponseDTO
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
-        // Загружаем аватар отправителя через вашу функцию
-        let sender_avatar = get_media_by_uuid(&state, row.sender_avatar_uuid)
-            .await
-            .ok()
-            .flatten();
-
-        // Фильтруем пустые строки для имён
-        let first_name = row.sender_first_name.filter(|s| !s.is_empty());
-        let second_name = row.sender_second_name.filter(|s| !s.is_empty());
-
-        // Загружаем медиа сообщения
-        let media = get_media_by_uuid(&state, row.media_uuid)
-            .await
-            .ok()
-            .flatten();
-
-        items.push(MessageResponseDTO {
-            uuid: row.uuid,
-            chat_uuid: row.chat_uuid,
-            sender_uuid: row.sender_uuid,
-            reply_to_uuid: row.reply_to_uuid,
-            body: row.body,
-            is_edited: row.is_edited,
-            is_deleted: row.is_deleted,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-
-            // 👇 Вложенный sender
-            sender: Some(UserPreviewDTO {
-                uuid: row.sender_uuid,
-                first_name,
-                second_name,
-                avatar: sender_avatar,
-                is_online: if let Some(ws) = &state.user_ws_state { ws.is_online(row.sender_uuid).await } else { false },
-                last_seen_at: row.sender_last_seen_at.unwrap_or_else(Utc::now),
-            }),
-
-            delivered_count: row.delivered_count,
-            read_count: row.read_count,
-            my_status: row.my_status,
-            reply_body_preview: row.reply_body_preview,
-            media,
-        });
+        items.push(map_message_row(&state, row).await);
     }
 
     items.reverse();
@@ -1347,16 +1346,35 @@ pub async fn ws_upgrade(
                         .await
                         .ok()?;
 
-                               let dto = map_message_row(&state_async, row).await;
-                               let event = WsServerEvent::NewMessage(dto);
-                               
-                               // Рассылаем через глобальный WS всем участникам
-                               if let Some(user_ws) = &state_async.user_ws_state {
-                                   let members = get_chat_member_uuids(&pool_async, msg_chat_uuid).await;
-                                   user_ws.broadcast_to_users(&members, event.clone()).await;
-                               }
+                        let msg = map_message_row(&state_async, row).await;
+                        
+                        // Broadcast to other members
+                        if let Some(user_ws) = &state_async.user_ws_state {
+                            let members = get_chat_member_uuids(&pool_async, msg_chat_uuid).await;
+                            user_ws.broadcast_to_users(&members, WsServerEvent::NewMessage(msg.clone())).await;
+                        }
 
-                               Some(event)
+                        Some(WsServerEvent::NewMessage(msg))
+                    }
+
+                    WsClientAction::Ping => Some(WsServerEvent::Pong),
+
+                    // ── Реакция на сообщение ──────────────────────────────────
+                    WsClientAction::ReactToMessage { chat_uuid: msg_chat_uuid, message_uuid, emoji } => {
+                        let is_added = handle_react_to_message(&pool_async, user_uuid, message_uuid, emoji.clone()).await.ok()?;
+                        let event = WsServerEvent::MessageReactionUpdated { 
+                            chat_uuid: msg_chat_uuid, 
+                            message_uuid, 
+                            user_uuid, 
+                            emoji, 
+                            is_added 
+                        };
+                        if let Some(user_ws) = &state_async.user_ws_state {
+                            let members = get_chat_member_uuids(&pool_async, msg_chat_uuid).await;
+                            user_ws.broadcast_to_users(&members, event.clone()).await;
+                        }
+
+                        Some(event)
                     }
 
                     // ── Редактировать сообщение ──────────────────────────────
@@ -1716,6 +1734,22 @@ pub async fn ws_user_upgrade(
                             user_ws.broadcast_to_users(&members, event).await;
                         }
 
+                        WsClientAction::ReactToMessage { chat_uuid, message_uuid, emoji } => {
+                            if !assert_member(pool, chat_uuid, user_uuid).await { return; }
+
+                            if let Ok(is_added) = handle_react_to_message(pool, user_uuid, message_uuid, emoji.clone()).await {
+                                let event = WsServerEvent::MessageReactionUpdated { 
+                                    chat_uuid, 
+                                    message_uuid, 
+                                    user_uuid, 
+                                    emoji, 
+                                    is_added 
+                                };
+                                let members = get_chat_member_uuids(pool, chat_uuid).await;
+                                user_ws.broadcast_to_users(&members, event).await;
+                            }
+                        }
+
                         WsClientAction::IceCandidate { chat_uuid, candidate, sdp_mid, sdp_m_line_index } => {
                             if !assert_member(pool, chat_uuid, user_uuid).await { return; }
                             let event = WsServerEvent::IceCandidate { chat_uuid, sender_uuid: user_uuid, candidate, sdp_mid, sdp_m_line_index };
@@ -1738,6 +1772,9 @@ pub async fn ws_user_upgrade(
                             let mut members = get_chat_member_uuids(pool, chat_uuid).await;
                             members.retain(|&m| m != user_uuid);
                             user_ws.broadcast_to_users(&members, event).await;
+                        }
+                        WsClientAction::Ping => {
+                            let _ = user_ws.send_to_user(user_uuid, WsServerEvent::Pong).await;
                         }
                     }
                 }

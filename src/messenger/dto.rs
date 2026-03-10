@@ -15,14 +15,16 @@ pub struct UserPreviewDTO {
     pub uuid: Uuid,
     pub first_name: Option<String>,
     pub second_name: Option<String>,
-
-    #[sqlx(default)]
     pub avatar: Option<MediaDTO>,
-
-    #[sqlx(default)]
     pub is_online: bool,
     #[sqlx(default)]
     pub last_seen_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema, Clone, FromRow)]
+pub struct ReactionDTO {
+    pub user_uuid: Uuid,
+    pub emoji: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, sqlx::Type)]
@@ -220,6 +222,9 @@ pub struct MessageResponseDTO {
   pub reply_body_preview: Option<String>,
 
   pub media: Option<MediaDTO>,
+  
+  #[sqlx(default)]
+  pub reactions: Vec<ReactionDTO>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -258,6 +263,7 @@ pub enum WsServerEvent {
     MessageEdited(MessageResponseDTO),
     MessageDeleted { uuid: Uuid, chat_uuid: Uuid },
     StatusUpdated { chat_uuid: Uuid, message_uuid: Uuid, user_uuid: Uuid, status: DeliveryStatus },
+    MessageReactionUpdated { chat_uuid: Uuid, message_uuid: Uuid, user_uuid: Uuid, emoji: String, is_added: bool },
     Typing { chat_uuid: Uuid, user_uuid: Uuid, is_typing: bool },
     MemberJoined(ChatMemberDTO),
     MemberLeft { chat_uuid: Uuid, user_uuid: Uuid },
@@ -270,6 +276,7 @@ pub enum WsServerEvent {
     IceCandidate { chat_uuid: Uuid, sender_uuid: Uuid, candidate: String, sdp_mid: Option<String>, sdp_m_line_index: Option<i32> },
     CallReject   { chat_uuid: Uuid, user_uuid: Uuid },
     CallEnd      { chat_uuid: Uuid, user_uuid: Uuid },
+    Pong,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -283,8 +290,11 @@ pub enum WsClientAction {
     DeleteMessage { chat_uuid: Uuid, uuid: Uuid },
     MarkDelivered { chat_uuid: Uuid },
     MarkRead      { chat_uuid: Uuid },
+    /// Добавить/удалить реакцию
+    ReactToMessage { chat_uuid: Uuid, message_uuid: Uuid, emoji: String },
     /// is_typing + chat_uuid для глобального канала
     Typing        { chat_uuid: Uuid, is_typing: bool },
+    Ping,
 
     // ── WebRTC Signaling ──
     CallOffer    { chat_uuid: Uuid, sdp: String },
