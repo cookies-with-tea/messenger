@@ -56,15 +56,20 @@
     <div class="p-3 border-t border-border bg-surface/30">
       <div class="flex items-center gap-3 p-2 rounded-xl bg-elevated/50 border border-border/50 group">
         <div class="relative">
-          <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-pulse/20 to-pulse/5 flex items-center justify-center border border-pulse/20 text-pulse font-bold text-sm shadow-[0_0_15px_rgba(var(--color-pulse),0.1)]">
-            {{ store.currentUserId.slice(0, 2).toUpperCase() }}
+          <div v-if="store.currentUserProfile?.avatar" class="w-9 h-9 rounded-lg overflow-hidden border border-border bg-surface flex items-center justify-center">
+            <img :src="store.currentUserProfile.avatar" class="w-full h-full object-cover" :alt="store.currentUserProfile.first_name || 'User'" />
+          </div>
+          <div v-else class="w-9 h-9 rounded-lg bg-gradient-to-br from-pulse/20 to-pulse/5 flex items-center justify-center border border-pulse/20 text-pulse font-bold text-sm shadow-[0_0_15px_rgba(var(--color-pulse),0.1)]">
+            {{ (store.currentUserProfile?.first_name || store.currentUserId || 'U').slice(0, 1).toUpperCase() }}{{ (store.currentUserProfile?.last_name || '').slice(0, 1).toUpperCase() }}
           </div>
           <div class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-pulse rounded-full border-2 border-abyss shadow-[0_0_8px_rgba(var(--color-pulse),0.5)]"></div>
         </div>
         
         <div class="flex-1 min-w-0">
           <div class="text-xs font-mono text-muted truncate">Logged in as</div>
-          <div class="text-xs font-mono text-text-base truncate font-bold">{{ store.currentUserId.split('-')[0] }}...</div>
+          <div class="text-xs font-mono text-text-base truncate font-bold">
+            {{ store.currentUserProfile ? `${store.currentUserProfile.first_name || ''} ${store.currentUserProfile.last_name || ''}`.trim() : (store.currentUserId ? store.currentUserId.split('-')[0] + '...' : 'Guest') }}
+          </div>
         </div>
 
         <button

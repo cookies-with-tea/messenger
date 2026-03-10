@@ -4,6 +4,7 @@ import type {
 	ChatResponseDTO,
 	ChatMemberDTO,
 	MessageResponseDTO,
+	UserResponseDTO,
 } from "@/types";
 
 const IS_DEV = import.meta.env.DEV;
@@ -113,21 +114,13 @@ export function wsUserUrl(): string {
 }
 
 // ─── Users ────────────────────────────────────────────────────────
-export interface UserResponseDTO {
-	uuid: string;
-	first_name: string | null;
-	last_name: string | null;
-	email: string | null;
-	avatar: string | null;
-	status?: string | null;
-}
-
 export const userApi = {
 	search: (query: string, limit = 20) => {
 		const q = new URLSearchParams({ limit: String(limit) });
 		if (query) q.set("search", query);
 		return get<ApiResponseWithPagination<UserResponseDTO>>(`/api/v1/user?${q}`);
 	},
+	get: (uuid: string) => get<ApiResponse<UserResponseDTO>>(`/api/v1/user/${uuid}`),
 };
 
 // ─── Media ────────────────────────────────────────────────────────

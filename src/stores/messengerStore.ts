@@ -1,8 +1,8 @@
 import { defineStore } from "pinia";
 import { ref, computed, watch } from "vue";
 import { useWebSocket } from "@vueuse/core";
-import type { ChatResponseDTO, ChatMemberDTO, MessageResponseDTO, DeliveryStatus, WsServerEvent } from "@/types";
-import { chatApi, messageApi, mediaApi, wsUserUrl, tokenStore } from "@/api";
+import type { ChatResponseDTO, ChatMemberDTO, MessageResponseDTO, UserResponseDTO, DeliveryStatus, WsServerEvent } from "@/types";
+import { chatApi, messageApi, mediaApi, userApi, wsUserUrl, tokenStore } from "@/api";
 import { useRouter } from "vue-router";
 
 // UUID текущего пользователя — берётся из JWT payload
@@ -26,6 +26,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 	const currentUserId = ref(parseCurrentUserId());
 
 	const chats = ref<ChatResponseDTO[]>([]);
+	const currentUserProfile = ref<UserResponseDTO | null>(null);
 	const chatsLoading = ref(false);
 
 	const messages = ref<Map<string, MessageResponseDTO[]>>(new Map());
@@ -188,6 +189,11 @@ export const useMessengerStore = defineStore("messenger", () => {
 		}
 	});
 
+	// Initial loads
+	if (tokenStore.isLoggedIn()) {
+		fetchCurrentUser();
+	}
+
 	// ─── Init WS (вызывать после логина) ─────────────────────────────
 	function initWs() {
 		const token = localStorage.getItem("access_token");
@@ -198,6 +204,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 		if (status.value === "OPEN" || status.value === "CONNECTING") return;
 		console.debug("[WS] Opening connection to:", wsEndpoint.value);
 		open();
+		fetchCurrentUser();
 	}
 
 	// ─── Load chats ───────────────────────────────────────────────────
@@ -208,6 +215,16 @@ export const useMessengerStore = defineStore("messenger", () => {
 			chats.value = res.data?.items ?? [];
 		} finally {
 			chatsLoading.value = false;
+		}
+	}
+
+	async function fetchCurrentUser() {
+		if (!currentUserId.value) return;
+		try {
+			const res = await userApi.get(currentUserId.value);
+			currentUserProfile.value = res.data;
+		} catch (e) {
+			console.error("[Store] Failed to fetch current user profile:", e);
 		}
 	}
 
@@ -494,6 +511,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 	return {
 		// state
 		currentUserId,
+		currentUserProfile,
 		chats,
 		chatsLoading,
 		messages,
@@ -510,6 +528,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 		initWs,
 		fetchChats,
 		fetchMessages,
+		fetchCurrentUser,
 		selectChat,
 		sendMessage,
 		sendVoiceMessage,

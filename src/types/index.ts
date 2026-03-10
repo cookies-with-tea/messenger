@@ -13,6 +13,24 @@ export interface UserPreviewDTO {
   last_seen_at: string
 }
 
+export interface UserResponseDTO {
+  uuid: string
+  first_name: string | null
+  second_name: string | null
+  last_name: string | null
+  phone: string | null
+  email: string
+  birth_date: string | null
+  avatar: string | null
+  street: string | null
+  gender: string | null
+  city: string | null
+  role: 'admin' | 'user'
+  status: 'active' | 'inactive' | 'in_moderation'
+  created_at: string
+  updated_at: string
+}
+
 export interface ChatResponseDTO {
   uuid: string
   name: string | null
