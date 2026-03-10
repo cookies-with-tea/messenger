@@ -43,6 +43,9 @@ export const useMessengerStore = defineStore("messenger", () => {
 	const replyingToMessage = ref<MessageResponseDTO | null>(null);
 	const editingMessage = ref<MessageResponseDTO | null>(null);
 
+	// Track which chats have had their full history fetched
+	const loadedChats = ref<Set<string>>(new Set());
+
 	// ─── Global WebSocket (per-user) ──────────────────────────────────
 	// Подключается один раз при логине, получает события по всем чатам.
 	// immediate: false — открываем вручную через initWs()
@@ -243,8 +246,8 @@ export const useMessengerStore = defineStore("messenger", () => {
 		const chat = chats.value.find((c) => c.uuid === chatUuid);
 		if (chat) chat.unread_count = 0;
 
-		// Load messages if not cached
-		if (!messages.value.has(chatUuid)) {
+		// Load messages if not cached or fully loaded
+		if (!loadedChats.value.has(chatUuid)) {
 			await fetchMessages(chatUuid);
 		}
 
@@ -265,6 +268,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 				messages.value.set(chatUuid, [...incoming, ...existing]);
 			} else {
 				messages.value.set(chatUuid, incoming);
+				loadedChats.value.add(chatUuid);
 			}
 		} finally {
 			messagesLoading.value = false;
@@ -526,6 +530,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 		members.value.clear();
 		activeChatId.value = null;
 		typingMap.value.clear();
+		loadedChats.value.clear();
 
 		router.push("/login");
 	}
