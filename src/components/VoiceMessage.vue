@@ -1,9 +1,9 @@
 <template>
-  <div class="voice-message flex items-center gap-3 p-2 rounded-2xl bg-surface/50 border border-border/50 max-w-[280px]">
+  <div class="voice-message flex items-center gap-3 py-1 px-0.5 min-w-[200px] sm:min-w-[240px]">
     <!-- Play/Pause Button -->
     <button 
       @click="togglePlay" 
-      class="shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-pulse text-white hover:shadow-glow transition-all active:scale-95"
+      class="shrink-0 w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl sm:rounded-full bg-white/10 hover:bg-white/20 text-white transition-all active:scale-95 border border-white/10 backdrop-blur-md"
     >
       <Transition name="scale" mode="out-in">
         <svg v-if="!isPlaying" class="w-5 h-5 ml-0.5" viewBox="0 0 20 20" fill="currentColor">
@@ -23,14 +23,14 @@
           v-for="(h, i) in waveData" 
           :key="i"
           class="w-0.5 rounded-full transition-all duration-300"
-          :class="i / waveData.length < progress ? 'bg-pulse' : 'bg-text-dim/30'"
+          :class="i / waveData.length < progress ? (isOwn ? 'bg-white' : 'bg-pulse') : 'bg-white/20'"
           :style="{ height: `${h}%` }"
         ></div>
       </div>
       
-      <div class="flex items-center justify-between">
-        <span class="text-[10px] font-mono text-text-dim tabular-nums">{{ currentFormattedTime }}</span>
-        <span class="text-[10px] font-mono text-text-dim tabular-nums">{{ totalFormattedTime }}</span>
+      <div class="flex items-center justify-between px-0.5">
+        <span class="text-[9px] font-mono text-white/50 tabular-nums">{{ currentFormattedTime }}</span>
+        <span class="text-[9px] font-mono text-white/50 tabular-nums">{{ totalFormattedTime }}</span>
       </div>
     </div>
 
@@ -51,6 +51,7 @@ import { ref, computed, onUnmounted } from 'vue'
 
 const props = defineProps<{
   src: string
+  isOwn?: boolean
 }>()
 
 const audioRef = ref<HTMLAudioElement>()
@@ -77,13 +78,15 @@ function togglePlay() {
   if (isPlaying.value) {
     audioRef.value.pause()
   } else {
-    audioRef.value.play()
+    audioRef.value.play().catch(() => {
+      isPlaying.value = false
+    })
   }
   isPlaying.value = !isPlaying.value
 }
 
 function onTimeUpdate() {
-  if (!audioRef.value) return
+  if (!audioRef.value || !audioRef.value.duration) return
   currentTime.value = audioRef.value.currentTime
   progress.value = audioRef.value.currentTime / audioRef.value.duration
 }
@@ -113,10 +116,6 @@ onUnmounted(() => {
 .scale-enter-from, .scale-leave-to {
   opacity: 0;
   transform: scale(0.5);
-}
-
-.shadow-glow {
-  box-shadow: 0 0 15px rgba(var(--color-pulse-rgb), 0.4);
 }
 
 .waveform div {

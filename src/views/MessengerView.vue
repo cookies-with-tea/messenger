@@ -1,5 +1,12 @@
 <template>
-  <div class="flex h-screen overflow-hidden bg-void text-text-base font-syne antialiased">
+  <div class="flex h-screen overflow-hidden bg-void text-text-base font-syne antialiased relative">
+    <!-- Cosmic Background Layer -->
+    <div class="starfield-container">
+      <div class="stars-1"></div>
+      <div class="stars-2"></div>
+      <div class="stars-3"></div>
+    </div>
+
     <!-- Sidebar: Hidden on mobile if a chat is active -->
     <div 
       class="w-full md:w-80 shrink-0 flex flex-col overflow-hidden border-r border-border"

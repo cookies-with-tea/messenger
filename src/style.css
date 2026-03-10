@@ -51,6 +51,68 @@
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
   }
+  @keyframes starsFloat {
+    0% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-20px) scale(1.1); }
+    100% { transform: translateY(0) scale(1); }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Glassmorphism & Cosmic Effects
+   ───────────────────────────────────────────────────────────── */
+.glass {
+  background: rgba(13, 16, 23, 0.6);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-heavy {
+  background: rgba(8, 10, 15, 0.85);
+  backdrop-filter: blur(20px) saturate(200%);
+  -webkit-backdrop-filter: blur(20px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.starfield-container {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--color-void);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.stars-1, .stars-2, .stars-3 {
+  position: absolute;
+  inset: -100px;
+  background-repeat: repeat;
+}
+
+.stars-1 {
+  background-image: 
+    radial-gradient(1px 1px at 20px 30px, white, rgba(0,0,0,0)),
+    radial-gradient(1px 1px at 40px 70px, rgba(255,255,255,0.8), rgba(0,0,0,0)),
+    radial-gradient(1.5px 1.5px at 100px 150px, white, rgba(0,0,0,0));
+  background-size: 200px 200px;
+  animation: starsFloat 100s linear infinite;
+  opacity: 0.3;
+}
+
+.stars-2 {
+  background-image: 
+    radial-gradient(1.5px 1.5px at 50px 100px, white, rgba(0,0,0,0)),
+    radial-gradient(1px 1px at 150px 200px, rgba(255,255,255,0.7), rgba(0,0,0,0));
+  background-size: 300px 300px;
+  animation: starsFloat 150s linear infinite reverse;
+  opacity: 0.2;
+}
+
+.stars-3 {
+  background: 
+    radial-gradient(ellipse at center, rgba(79, 124, 255, 0.05) 0%, transparent 70%),
+    radial-gradient(ellipse at bottom left, rgba(0, 229, 255, 0.03) 0%, transparent 50%);
 }
 
 /* ─────────────────────────────────────────────────────────────

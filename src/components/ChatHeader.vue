@@ -1,35 +1,38 @@
 <template>
-  <div class="flex items-center gap-3 px-5 py-3.5 border-b border-border bg-abyss/80 backdrop-blur-sm">
+  <div class="flex items-center gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-white/5 glass backdrop-blur-md relative z-20">
     <!-- Back Button for Mobile -->
     <button
       @click="goBack"
-      class="md:hidden p-2 -ml-2 rounded-lg text-text-dim hover:text-text-bright hover:bg-elevated transition-all"
+      class="md:hidden p-1.5 sm:p-2 -ml-1 sm:-ml-2 rounded-lg text-text-dim hover:text-text-bright hover:bg-white/5 transition-all"
     >
       <svg class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
         <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
       </svg>
     </button>
 
-    <ChatAvatar :chat="chatSender" :size="38" :show-status="isDirect" />
+    <ChatAvatar :chat="chatSender" :size="32" class="sm:w-[38px] sm:h-[38px]" :show-status="isDirect" />
 
     <div class="flex-1 min-w-0">
-      <h2 class="text-sm font-syne font-bold text-text-bright truncate">
-        {{ displayName }}
-      </h2>
-      <p class="text-xs font-mono truncate" :class="statusColorClass">
+      <div class="flex items-center gap-2">
+        <h2 class="text-xs sm:text-sm font-syne font-black text-text-bright truncate leading-tight tracking-tight uppercase">
+          {{ displayName }}
+        </h2>
+        <div v-if="props.chat.sender?.is_online" class="w-1.5 h-1.5 rounded-full bg-sage shadow-[0_0_8px_rgba(var(--color-sage),0.8)] animate-pulse"></div>
+      </div>
+      <p class="text-[9px] sm:text-[10px] font-mono truncate uppercase tracking-widest mt-0.5" :class="statusColorClass">
         {{ statusText }}
       </p>
     </div>
 
-    <div class="flex items-center gap-1">
+    <div class="flex items-center gap-1 sm:gap-2">
       <button
         v-for="(action, i) in actions"
         :key="i"
         @click="handleAction(action.action)"
-        class="p-2 rounded-lg text-text-dim hover:text-text-bright hover:bg-elevated transition-all"
+        class="p-2 sm:p-2.5 rounded-xl text-text-dim hover:text-text-bright hover:bg-white/5 transition-all relative group"
         :title="action.label"
       >
-        <component :is="action.icon" class="w-4 h-4" />
+        <component :is="action.icon" class="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:scale-110 transition-transform" />
       </button>
     </div>
   </div>
@@ -95,9 +98,9 @@ function formatLastSeen(ts?: string) {
   const now = new Date()
   const diff = now.getTime() - date.getTime()
   
-  if (diff < 60_000) return 'last seen just now'
-  if (diff < 3600_000) return `last seen ${Math.floor(diff / 60_000)}m ago`
-  if (diff < 86400_000) return `last seen ${Math.floor(diff / 3600_000)}h ago`
-  return `last seen ${date.toLocaleDateString()}`
+  if (diff < 60_000) return 'just now'
+  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`
+  return `${date.toLocaleDateString()}`
 }
 </script>

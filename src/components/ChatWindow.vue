@@ -1,41 +1,42 @@
 <template>
-	<div class="flex flex-col h-full">
+	<div class="flex flex-col h-full bg-transparent">
 		<ChatHeader :chat="store.activeChat!" />
 
 		<!-- Messages -->
 		<div
 			ref="messagesEl"
-			class="flex-1 overflow-y-auto px-5 py-6 space-y-1 scroll-smooth scrollbar-thin"
-			style="background: radial-gradient(ellipse at 80% 20%, rgba(79, 124, 255, 0.03) 0%, transparent 60%), #080a0f"
+			class="flex-1 overflow-y-auto scroll-smooth scrollbar-thin bg-transparent"
 			@scroll="onScroll"
 		>
-			<!-- Load more -->
-			<div v-if="store.messagesLoading" class="flex justify-center py-2">
-				<span class="text-xs font-mono text-muted animate-pulse">Loading...</span>
-			</div>
+      <div class="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-1 sm:space-y-1.5">
+			  <!-- Load more -->
+			  <div v-if="store.messagesLoading" class="flex justify-center py-2">
+				  <span class="text-[10px] sm:text-xs font-mono text-muted animate-pulse font-bold tracking-widest uppercase">Scanning Stream...</span>
+			  </div>
 
-			<template v-for="(group, idx) in groupedMessages" :key="idx">
-				<div class="flex items-center gap-3 py-3">
-					<div class="flex-1 h-px bg-border/50" />
-					<span class="text-[10px] font-mono text-muted px-2">{{ group.date }}</span>
-					<div class="flex-1 h-px bg-border/50" />
-				</div>
+			  <template v-for="(group, idx) in groupedMessages" :key="idx">
+				  <div class="flex items-center gap-3 py-4">
+					  <div class="flex-1 h-px bg-white/5" />
+					  <span class="text-[9px] sm:text-[10px] font-mono font-black text-muted px-4 py-1 rounded-full glass border border-white/5 uppercase tracking-widest">{{ group.date }}</span>
+					  <div class="flex-1 h-px bg-white/5" />
+				  </div>
 
-				<div v-for="(msg, mIdx) in group.messages" :key="msg.uuid" class="mb-0.5">
-					<MessageBubble
-						:message="msg"
-						:is-group="store.activeChat!.chat_type === 'group'"
-						:show-avatar="shouldShowAvatar(group.messages, mIdx)"
-					/>
-				</div>
-			</template>
+				  <div v-for="(msg, mIdx) in group.messages" :key="msg.uuid" class="mb-0.5">
+					  <MessageBubble
+						  :message="msg"
+						  :is-group="store.activeChat?.chat_type === 'group'"
+						  :show-avatar="shouldShowAvatar(group.messages, mIdx)"
+					  />
+				  </div>
+			  </template>
 
-			<!-- Typing -->
-			<div v-if="typingUsers.length > 0" class="pt-2">
-				<TypingIndicator :user-ids="typingUsers" />
-			</div>
+			  <!-- Typing -->
+			  <div v-if="typingUsers.length > 0" class="pt-2">
+				  <TypingIndicator :user-ids="typingUsers" />
+			  </div>
 
-			<div ref="bottomAnchor" />
+			  <div ref="bottomAnchor" />
+      </div>
 		</div>
 
 		<MessageInput @send="handleSend" @typing="store.sendTyping(true)" @stop-typing="store.sendTyping(false)" />
@@ -85,21 +86,24 @@ function formatDate(d: Date): string {
 }
 
 function scrollToBottom(instant = false) {
-	nextTick(() => bottomAnchor.value?.scrollIntoView({ behavior: instant ? "instant" : "smooth" }));
+	nextTick(() => {
+		if (bottomAnchor.value) {
+			bottomAnchor.value.scrollIntoView({ behavior: instant ? "instant" : "smooth" });
+		}
+	});
 }
 
 const allLoaded = ref(false);
+let lastFetchedOldestUuid: string | null = null;
 
 // Load older messages on scroll to top
 async function onScroll() {
 	if (!messagesEl.value || store.messagesLoading || allLoaded.value) return;
 	
-	// Prevent fetching if the container doesn't have a scrollbar yet or if we just loaded
 	if (messagesEl.value.scrollHeight <= messagesEl.value.clientHeight) return;
 
 	if (messagesEl.value.scrollTop < 60 && store.activeMessages.length > 0) {
 		const oldestUuid = store.activeMessages[0]?.uuid;
-		// Wait a bit to prevent rapid fire
 		if (oldestUuid && store.activeChatId && oldestUuid !== lastFetchedOldestUuid) {
 			lastFetchedOldestUuid = oldestUuid;
 			const oldLength = store.activeMessages.length;
@@ -111,7 +115,6 @@ async function onScroll() {
 	}
 }
 
-let lastFetchedOldestUuid: string | null = null;
 watch(() => store.activeChatId, () => {
 	lastFetchedOldestUuid = null;
 	allLoaded.value = false;
@@ -120,16 +123,16 @@ watch(() => store.activeChatId, () => {
 watch(
 	() => store.activeChatId,
 	(v) => {
-		console.log("[INFO: ActiveChatId changed]", v);
-
-		scrollToBottom(true);
+		if (v) scrollToBottom(true);
 	},
 	{ immediate: true },
 );
+
 watch(
 	() => store.activeMessages.length,
 	() => scrollToBottom(),
 );
+
 watch(
 	() => typingUsers.value.length,
 	() => scrollToBottom(),
