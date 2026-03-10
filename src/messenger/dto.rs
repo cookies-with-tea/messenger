@@ -258,9 +258,15 @@ pub enum WsServerEvent {
     MemberLeft { chat_uuid: Uuid, user_uuid: Uuid },
     UserStatusChanged { user_uuid: Uuid, is_online: bool, last_seen_at: DateTime<Utc> },
     Error { message: String },
+    
+    // ── WebRTC Signaling ──
+    CallOffer    { chat_uuid: Uuid, caller_uuid: Uuid, sdp: String },
+    CallAnswer   { chat_uuid: Uuid, responder_uuid: Uuid, sdp: String },
+    IceCandidate { chat_uuid: Uuid, sender_uuid: Uuid, candidate: String, sdp_mid: Option<String>, sdp_m_line_index: Option<i32> },
+    CallReject   { chat_uuid: Uuid, user_uuid: Uuid },
+    CallEnd      { chat_uuid: Uuid, user_uuid: Uuid },
 }
 
-/// Действия, которые клиент отправляет серверу по WS
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(tag = "action", content = "payload", rename_all = "snake_case")]
 pub enum WsClientAction {
@@ -274,6 +280,13 @@ pub enum WsClientAction {
     MarkRead      { chat_uuid: Uuid },
     /// is_typing + chat_uuid для глобального канала
     Typing        { chat_uuid: Uuid, is_typing: bool },
+
+    // ── WebRTC Signaling ──
+    CallOffer    { chat_uuid: Uuid, sdp: String },
+    CallAnswer   { chat_uuid: Uuid, sdp: String },
+    IceCandidate { chat_uuid: Uuid, candidate: String, sdp_mid: Option<String>, sdp_m_line_index: Option<i32> },
+    CallReject   { chat_uuid: Uuid },
+    CallEnd      { chat_uuid: Uuid },
 }
 
 

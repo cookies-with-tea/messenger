@@ -1413,6 +1413,13 @@ pub async fn ws_upgrade(
                     WsClientAction::Typing { is_typing, chat_uuid: msg_chat_uuid } => {
                         Some(WsServerEvent::Typing { chat_uuid: msg_chat_uuid, user_uuid, is_typing })
                     }
+
+                    // ── WebRTC (Игнор в старом per-chat сокете) ─────────────────
+                    WsClientAction::CallOffer { .. } |
+                    WsClientAction::CallAnswer { .. } |
+                    WsClientAction::IceCandidate { .. } |
+                    WsClientAction::CallReject { .. } |
+                    WsClientAction::CallEnd { .. } => None,
                 }
             }
         })
@@ -1664,6 +1671,48 @@ pub async fn ws_user_upgrade(
                             let event = WsServerEvent::Typing { chat_uuid, user_uuid, is_typing };
                             let members = get_chat_member_uuids(pool, chat_uuid).await;
                             // Typing шлём всем кроме себя — фильтрация на клиенте
+                            user_ws.broadcast_to_users(&members, event).await;
+                        }
+
+                        // ── WebRTC ──────────────────────────────────────────────
+                        WsClientAction::CallOffer { chat_uuid, sdp } => {
+                            // Проверяем членство в чате для безопасности
+                            if !assert_member(pool, chat_uuid, user_uuid).await { return; }
+                            let event = WsServerEvent::CallOffer { chat_uuid, caller_uuid: user_uuid, sdp };
+                            let mut members = get_chat_member_uuids(pool, chat_uuid).await;
+                            members.retain(|&m| m != user_uuid);
+                            user_ws.broadcast_to_users(&members, event).await;
+                        }
+                        
+                        WsClientAction::CallAnswer { chat_uuid, sdp } => {
+                            if !assert_member(pool, chat_uuid, user_uuid).await { return; }
+                            let event = WsServerEvent::CallAnswer { chat_uuid, responder_uuid: user_uuid, sdp };
+                            let mut members = get_chat_member_uuids(pool, chat_uuid).await;
+                            members.retain(|&m| m != user_uuid);
+                            user_ws.broadcast_to_users(&members, event).await;
+                        }
+
+                        WsClientAction::IceCandidate { chat_uuid, candidate, sdp_mid, sdp_m_line_index } => {
+                            if !assert_member(pool, chat_uuid, user_uuid).await { return; }
+                            let event = WsServerEvent::IceCandidate { chat_uuid, sender_uuid: user_uuid, candidate, sdp_mid, sdp_m_line_index };
+                            let mut members = get_chat_member_uuids(pool, chat_uuid).await;
+                            members.retain(|&m| m != user_uuid);
+                            user_ws.broadcast_to_users(&members, event).await;
+                        }
+
+                        WsClientAction::CallReject { chat_uuid } => {
+                            if !assert_member(pool, chat_uuid, user_uuid).await { return; }
+                            let event = WsServerEvent::CallReject { chat_uuid, user_uuid };
+                            let mut members = get_chat_member_uuids(pool, chat_uuid).await;
+                            members.retain(|&m| m != user_uuid);
+                            user_ws.broadcast_to_users(&members, event).await;
+                        }
+
+                        WsClientAction::CallEnd { chat_uuid } => {
+                            if !assert_member(pool, chat_uuid, user_uuid).await { return; }
+                            let event = WsServerEvent::CallEnd { chat_uuid, user_uuid };
+                            let mut members = get_chat_member_uuids(pool, chat_uuid).await;
+                            members.retain(|&m| m != user_uuid);
                             user_ws.broadcast_to_users(&members, event).await;
                         }
                     }
