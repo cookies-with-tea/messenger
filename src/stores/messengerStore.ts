@@ -68,6 +68,16 @@ export const useMessengerStore = defineStore("messenger", () => {
 		return [m.first_name, m.last_name].filter(Boolean).join(" ") || m.user_uuid;
 	}
 
+// ─── STORES ───────────────────────────────────────────────────────
+
+	function sendRawWsMessage(msg: Record<string, any>) {
+		if (status.value === "OPEN") {
+			send(JSON.stringify(msg));
+		} else {
+			console.warn("[WS] Cannot send raw message, socket not OPEN", msg);
+		}
+	}
+
 	function handleWsMessage(event: string) {
 		console.debug("[WS:Incoming]", event);
 		try {
@@ -115,6 +125,43 @@ export const useMessengerStore = defineStore("messenger", () => {
 				case "user_status_changed": {
 					const { user_uuid, is_online, last_seen_at } = ev.payload;
 					_updateUserStatus(user_uuid, is_online, last_seen_at);
+					break;
+				}
+
+				// ─── WebRTC Signaling ───
+				case "call_offer": {
+					import("./callStore").then(({ useCallStore }) => {
+						// @ts-ignore
+						useCallStore().receiveOffer(ev.payload.chat_uuid, ev.payload.caller_uuid, ev.payload.sdp);
+					});
+					break;
+				}
+				case "call_answer": {
+					import("./callStore").then(({ useCallStore }) => {
+						// @ts-ignore
+						useCallStore().receiveAnswer(ev.payload.chat_uuid, ev.payload.responder_uuid, ev.payload.sdp);
+					});
+					break;
+				}
+				case "ice_candidate": {
+					import("./callStore").then(({ useCallStore }) => {
+						// @ts-ignore
+						useCallStore().receiveIceCandidate(ev.payload.chat_uuid, ev.payload.candidate, ev.payload.sdp_mid, ev.payload.sdp_m_line_index);
+					});
+					break;
+				}
+				case "call_reject": {
+					import("./callStore").then(({ useCallStore }) => {
+						// @ts-ignore
+						useCallStore().handleRemoteCallReject(ev.payload.chat_uuid);
+					});
+					break;
+				}
+				case "call_end": {
+					import("./callStore").then(({ useCallStore }) => {
+						// @ts-ignore
+						useCallStore().handleRemoteCallEnd(ev.payload.chat_uuid);
+					});
 					break;
 				}
 
@@ -187,6 +234,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 
 	// ─── Load messages ────────────────────────────────────────────────
 	async function fetchMessages(chatUuid: string, beforeUuid?: string) {
+		if (messagesLoading.value) return;
 		messagesLoading.value = true;
 		try {
 			const res = await messageApi.list(chatUuid, { limit: 50, before_uuid: beforeUuid });
@@ -453,5 +501,6 @@ export const useMessengerStore = defineStore("messenger", () => {
 		markRead,
 		markDelivered,
 		logout,
+		sendRawWsMessage,
 	};
 });

@@ -7,6 +7,8 @@
       <ChatWindow v-if="store.activeChat" />
       <EmptyState v-else />
     </main>
+    <!-- WebRTC Call Modal Overlay -->
+    <CallModal />
   </div>
 </template>
 
@@ -16,6 +18,7 @@ import { useMessengerStore } from '@/stores/messengerStore'
 import ChatSidebar from '@/components/ChatSidebar.vue'
 import ChatWindow  from '@/components/ChatWindow.vue'
 import EmptyState  from '@/components/EmptyState.vue'
+import CallModal from '@/components/CallModal.vue'
 
 const store = useMessengerStore()
 

@@ -88,16 +88,34 @@ function scrollToBottom(instant = false) {
 	nextTick(() => bottomAnchor.value?.scrollIntoView({ behavior: instant ? "instant" : "smooth" }));
 }
 
+const allLoaded = ref(false);
+
 // Load older messages on scroll to top
 async function onScroll() {
-	if (!messagesEl.value || store.messagesLoading) return;
+	if (!messagesEl.value || store.messagesLoading || allLoaded.value) return;
+	
+	// Prevent fetching if the container doesn't have a scrollbar yet or if we just loaded
+	if (messagesEl.value.scrollHeight <= messagesEl.value.clientHeight) return;
+
 	if (messagesEl.value.scrollTop < 60 && store.activeMessages.length > 0) {
 		const oldestUuid = store.activeMessages[0]?.uuid;
-		if (oldestUuid && store.activeChatId) {
+		// Wait a bit to prevent rapid fire
+		if (oldestUuid && store.activeChatId && oldestUuid !== lastFetchedOldestUuid) {
+			lastFetchedOldestUuid = oldestUuid;
+			const oldLength = store.activeMessages.length;
 			await store.fetchMessages(store.activeChatId, oldestUuid);
+			if (store.activeMessages.length === oldLength) {
+				allLoaded.value = true;
+			}
 		}
 	}
 }
+
+let lastFetchedOldestUuid: string | null = null;
+watch(() => store.activeChatId, () => {
+	lastFetchedOldestUuid = null;
+	allLoaded.value = false;
+});
 
 watch(
 	() => store.activeChatId,
