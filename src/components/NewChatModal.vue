@@ -179,11 +179,13 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useMessengerStore } from '@/stores/messengerStore'
 import { userApi, chatApi, type UserResponseDTO } from '@/api'
 
 const props  = defineProps<{ open: boolean }>()
 const emit   = defineEmits<{ close: [] }>()
+const router = useRouter()
 
 const store   = useMessengerStore()
 const activeTab  = ref<'direct' | 'group'>('direct')
@@ -252,6 +254,9 @@ async function startDirectChat(user: UserResponseDTO) {
     if (res.data) {
       await store.fetchChats()
       await store.selectChat(res.data.uuid)
+      if (router.currentRoute.value.path !== `/chat/${res.data.uuid}`) {
+        router.push(`/chat/${res.data.uuid}`)
+      }
       close()
     }
   } finally {
@@ -271,6 +276,9 @@ async function createGroup() {
     if (res.data) {
       await store.fetchChats()
       await store.selectChat(res.data.uuid)
+      if (router.currentRoute.value.path !== `/chat/${res.data.uuid}`) {
+        router.push(`/chat/${res.data.uuid}`)
+      }
       close()
     }
   } finally {

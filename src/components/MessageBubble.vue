@@ -47,14 +47,17 @@
       <div class="flex items-center gap-1.5 px-1" :class="isOwn ? 'flex-row-reverse' : 'flex-row'">
         <span class="text-[10px] font-mono text-muted">{{ timeLabel }}</span>
         <div v-if="isOwn" class="flex" :class="statusClass">
-          <svg v-if="message.my_status === 'read'" class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor">
+          <!-- Read: Double check, blue -->
+          <svg v-if="displayStatus === 'read'" class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor">
             <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
             <path d="M10.354 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L2.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
           </svg>
-          <svg v-else-if="message.my_status === 'delivered'" class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor">
+          <!-- Delivered: Double check, gray -->
+          <svg v-else-if="displayStatus === 'delivered'" class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor">
             <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
             <path d="M10.354 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L2.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
           </svg>
+          <!-- Sent: Single check, gray -->
           <svg v-else class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor">
             <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
           </svg>
@@ -103,8 +106,14 @@ const timeLabel = computed(() => {
   return d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false })
 })
 
+const displayStatus = computed(() => {
+  if (props.message.read_count && props.message.read_count > 0) return 'read'
+  if (props.message.delivered_count && props.message.delivered_count > 0) return 'delivered'
+  return 'sent'
+})
+
 const statusClass = computed(() => ({
-  'text-white/50': props.message.my_status !== 'read',
-  'text-sage':  props.message.my_status === 'read',
+  'text-white/50': displayStatus.value !== 'read',
+  'text-sage':  displayStatus.value === 'read',
 }))
 </script>

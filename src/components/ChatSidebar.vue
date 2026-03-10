@@ -108,7 +108,9 @@ const filteredChats = computed(() => {
 const selectChat = (uuid: string) => {
 	store.selectChat(uuid)
 
-	router.push(`/chat/${uuid}`);
+	if (router.currentRoute.value.path !== `/chat/${uuid}`) {
+		router.push(`/chat/${uuid}`);
+	}
 }
 
 const handleLogout = () => {

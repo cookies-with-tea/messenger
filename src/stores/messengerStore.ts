@@ -68,10 +68,11 @@ export const useMessengerStore = defineStore("messenger", () => {
 		return [m.first_name, m.last_name].filter(Boolean).join(" ") || m.user_uuid;
 	}
 
-	// ─── WebSocket Message Handler ────────────────────────────────────
 	function handleWsMessage(event: string) {
+		console.debug("[WS:Incoming]", event);
 		try {
 			const ev: WsServerEvent = JSON.parse(event);
+			console.debug("[WS:ParsedEvent]", ev.event, ev);
 
 			switch (ev.event) {
 				case "new_message": {
@@ -79,11 +80,13 @@ export const useMessengerStore = defineStore("messenger", () => {
 					_appendMessage(msg);
 					_bumpChat(msg.chat_uuid, msg.body, msg.created_at);
 					
-					// Авто-подтверждение получения/прочтения
-					if (msg.chat_uuid === activeChatId.value) {
-						markRead(msg.chat_uuid);
-					} else {
-						markDelivered(msg.chat_uuid);
+					// Авто-подтверждение получения/прочтения (только если не мы отправители)
+					if (msg.sender_uuid !== currentUserId.value) {
+						if (msg.chat_uuid === activeChatId.value) {
+							markRead(msg.chat_uuid);
+						} else {
+							markDelivered(msg.chat_uuid);
+						}
 					}
 					break;
 				}
@@ -140,7 +143,13 @@ export const useMessengerStore = defineStore("messenger", () => {
 
 	// ─── Init WS (вызывать после логина) ─────────────────────────────
 	function initWs() {
+		const token = localStorage.getItem("access_token");
+		if (!token) {
+			console.warn("[WS] No token, cannot init WS");
+			return;
+		}
 		if (status.value === "OPEN" || status.value === "CONNECTING") return;
+		console.debug("[WS] Opening connection to:", wsEndpoint.value);
 		open();
 	}
 
@@ -199,11 +208,29 @@ export const useMessengerStore = defineStore("messenger", () => {
 		if (!chatUuid || !body.trim()) return;
 
 		if (status.value !== "OPEN") {
-			console.warn("[WS] Not connected, trying to reconnect...");
-			open();
+			console.warn("[WS] Not connected, trying to connect and retry...");
+			initWs();
+			
+			// Ждем открытия сокета короткое время и пробуем снова (простое решение)
+			let attempts = 0;
+			const checkOpen = setInterval(() => {
+				attempts++;
+				if (status.value === "OPEN") {
+					clearInterval(checkOpen);
+					_performSend(chatUuid, body, replyToUuid);
+				} else if (attempts > 20) {
+					clearInterval(checkOpen);
+					console.error("[WS] Failed to connect for sending message");
+				}
+			}, 200);
 			return;
 		}
 
+		_performSend(chatUuid, body, replyToUuid);
+	}
+
+	function _performSend(chatUuid: string, body: string, replyToUuid?: string) {
+		console.debug("[WS:Send]", { chatUuid, body });
 		send(JSON.stringify({
 			action: "send_message",
 			payload: {
@@ -327,24 +354,61 @@ export const useMessengerStore = defineStore("messenger", () => {
 		);
 	}
 
-	function _bumpChat(chatUuid: string, lastBody: string, lastAt: string) {
-		const chat = chats.value.find((c) => c.uuid === chatUuid);
-		if (!chat) return;
-		chat.last_message_body = lastBody;
-		chat.last_message_at = lastAt;
-		const idx = chats.value.indexOf(chat);
-		if (idx > 0) {
-			chats.value.splice(idx, 1);
-			chats.value.unshift(chat);
+	async function _bumpChat(chatUuid: string, lastBody: string, lastAt: string) {
+		console.debug("[WS:BumpChat]", { chatUuid, lastBody });
+		let chat = chats.value.find((c) => c.uuid === chatUuid);
+		
+		if (!chat) {
+			console.debug("[WS:BumpChat] Chat not found locally, fetching...", chatUuid);
+			// Если чата нет, пробуем загрузить его (например, новый диалог)
+			try {
+				const res = await chatApi.get(chatUuid);
+				if (res.data) {
+					console.debug("[WS:BumpChat] Fetched new chat:", res.data.uuid);
+					chats.value.unshift(res.data);
+					chat = res.data;
+				}
+			} catch (err) {
+				console.error("[WS:BumpChat] Failed to fetch new chat details:", err);
+				return;
+			}
+		}
+
+		if (chat) {
+			chat.last_message_body = lastBody;
+			chat.last_message_at = lastAt;
+			const idx = chats.value.indexOf(chat);
+			if (idx > 0) {
+				chats.value.splice(idx, 1);
+				chats.value.unshift(chat);
+			}
 		}
 	}
 
-	function _applyStatus(chatUuid: string, _userUuid: string, statusVal: DeliveryStatus) {
+	function _applyStatus(chatUuid: string, userUuid: string, statusVal: DeliveryStatus) {
 		const list = messages.value.get(chatUuid);
 		if (!list) return;
-		list.forEach((m) => {
-			if (m.my_status !== "read") m.my_status = statusVal;
-		});
+
+		// 1. Если это МЫ прочитали/получили (userUuid === currentUserId)
+		// Обновляем my_status для всех чужих сообщений
+		if (userUuid === currentUserId.value) {
+			list.forEach((m) => {
+				if (m.sender_uuid !== currentUserId.value) {
+					if (statusVal === "read") m.my_status = "read";
+					else if (statusVal === "delivered" && m.my_status !== "read") m.my_status = "delivered";
+				}
+			});
+		} 
+		// 2. Если КТО-ТО ДРУГОЙ прочитал (userUuid !== currentUserId)
+		// Обновляем counts для НАШИХ сообщений (упрощенно: считаем что прочитал всё)
+		else {
+			list.forEach((m) => {
+				if (m.sender_uuid === currentUserId.value) {
+					if (statusVal === "read") m.read_count = (m.read_count ?? 0) + 1;
+					else if (statusVal === "delivered") m.delivered_count = (m.delivered_count ?? 0) + 1;
+				}
+			});
+		}
 	}
 
 	function logout() {

@@ -98,16 +98,18 @@ export const messageApi = {
 };
 
 // ─── WebSocket URL builder ─────────────────────────────────────────
+const WS_BASE = import.meta.env.VITE_BASE_WS_URL ?? "ws://localhost:8000";
+
 /** Per-chat WebSocket (старый, для совместимости) */
 export function wsUrl(chatUuid: string): string {
   const token = localStorage.getItem("access_token") ?? ""
-  return `ws://localhost:8000/ws/chats/${chatUuid}?token=${token}`
+  return `${WS_BASE}/ws/chats/${chatUuid}?token=${token}`
 }
 
 /** Глобальный WebSocket — один канал на пользователя, все чаты */
 export function wsUserUrl(): string {
   const token = localStorage.getItem("access_token") ?? ""
-  return `ws://localhost:8000/ws/user?token=${token}`
+  return `${WS_BASE}/ws/user?token=${token}`
 }
 
 // ─── Users ────────────────────────────────────────────────────────
