@@ -76,7 +76,7 @@ export interface MessageResponseDTO {
   read_count: number | null
   my_status: DeliveryStatus | null
   reply_body_preview: string | null
-  media: { url: string; media_type: string; uuid: string } | null
+  media: { url: string; media_type: string; uuid: string; title?: string } | null
 }
 
 // ─── API wrappers ─────────────────────────────────────────────────

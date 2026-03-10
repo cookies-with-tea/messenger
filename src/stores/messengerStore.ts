@@ -39,6 +39,10 @@ export const useMessengerStore = defineStore("messenger", () => {
 	// uuid → Set<user_uuid> кто сейчас печатает
 	const typingMap = ref<Map<string, Set<string>>>(new Map());
 
+	// Edition & Reply State
+	const replyingToMessage = ref<MessageResponseDTO | null>(null);
+	const editingMessage = ref<MessageResponseDTO | null>(null);
+
 	// ─── Global WebSocket (per-user) ──────────────────────────────────
 	// Подключается один раз при логине, получает события по всем чатам.
 	// immediate: false — открываем вручную через initWs()
@@ -295,16 +299,19 @@ export const useMessengerStore = defineStore("messenger", () => {
 	}
 
 	function _performSend(chatUuid: string, body: string, replyToUuid?: string, mediaUuid?: string) {
-		console.debug("[WS:Send]", { chatUuid, body, mediaUuid });
+		console.debug("[WS:Send]", { chatUuid, body, mediaUuid, replyToUuid });
 		send(JSON.stringify({
 			action: "send_message",
 			payload: {
 				chat_uuid: chatUuid,
 				body: body.trim(),
-				reply_to_uuid: replyToUuid ?? null,
+				reply_to_uuid: replyToUuid ?? replyingToMessage.value?.uuid ?? null,
 				media_uuid: mediaUuid ?? null,
 			},
 		}));
+		// Clear local state after send
+		replyingToMessage.value = null;
+		editingMessage.value = null;
 	}
 
 	async function sendVoiceMessage(blob: Blob, replyToUuid?: string) {
@@ -316,10 +323,25 @@ export const useMessengerStore = defineStore("messenger", () => {
 			const res = await mediaApi.upload(blob, "voice_message.webm");
 			if (res.data?.uuid) {
 				// 2. Send via WS
-				_performSend(chatUuid, "[Voice Message]", replyToUuid, res.data.uuid);
+				_performSend(chatUuid, "[Voice Message]", replyToUuid ?? replyingToMessage.value?.uuid, res.data.uuid);
 			}
 		} catch (e) {
 			console.error("[VoiceMessage] Failed to upload/send:", e);
+		}
+	}
+
+	async function sendFileMessage(file: File) {
+		const chatUuid = activeChatId.value;
+		if (!chatUuid) return;
+
+		try {
+			const res = await mediaApi.upload(file, file.name);
+			if (res.data?.uuid) {
+				const label = file.type.startsWith('image/') ? '[Image]' : `[File: ${file.name}]`;
+				_performSend(chatUuid, label, replyingToMessage.value?.uuid, res.data.uuid);
+			}
+		} catch (e) {
+			console.error("[FileSend] Failed:", e);
 		}
 	}
 
@@ -341,7 +363,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 
 		send(JSON.stringify({
 			action: "delete_message",
-			payload: { chat_uuid: chatUuid, uuid: msgUuid },
+			payload: { uuid: msgUuid },
 		}));
 	}
 
@@ -519,6 +541,8 @@ export const useMessengerStore = defineStore("messenger", () => {
 		members,
 		activeChatId,
 		wsStatus: status,
+		replyingToMessage,
+		editingMessage,
 		// computed
 		activeChat,
 		activeMessages,
@@ -532,6 +556,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 		selectChat,
 		sendMessage,
 		sendVoiceMessage,
+		sendFileMessage,
 		editMessage,
 		deleteMessage,
 		sendTyping,

@@ -2,6 +2,7 @@
   <div
     class="flex gap-2.5 group animate-slide-up"
     :class="isOwn ? 'flex-row-reverse' : 'flex-row'"
+    @contextmenu.prevent="handleContextMenu"
   >
     <!-- Avatar placeholder for alignment -->
     <div class="w-8 shrink-0">
@@ -26,7 +27,8 @@
       <!-- Reply preview -->
       <div
         v-if="message.reply_body_preview"
-        class="text-[10px] font-mono px-3 py-1.5 rounded-xl border border-white/5 text-text-dim bg-white/2 max-w-full truncate backdrop-blur-sm mb-0.5"
+        class="text-[10px] font-mono px-3 py-1.5 rounded-xl border border-white/5 text-text-dim bg-white/2 max-w-full truncate backdrop-blur-sm mb-0.5 cursor-pointer hover:bg-white/5 transition-colors"
+        @click="scrollToReply"
       >
         <span class="opacity-50 italic">Replying to:</span> {{ message.reply_body_preview }}
       </div>
@@ -41,9 +43,28 @@
           :src="message.media.url"
           :is-own="isOwn"
         />
-        <p v-else class="text-xs sm:text-sm leading-relaxed break-words whitespace-pre-wrap font-mono" :class="textClass">
+        
+        <!-- Image Content -->
+        <div v-else-if="message.media?.media_type === 'image'" class="mb-1 rounded-lg overflow-hidden glass-heavy border border-white/10">
+          <img :src="message.media.url" class="max-w-full max-h-[300px] object-contain block" :alt="message.body" />
+        </div>
+
+        <!-- File Content -->
+        <div v-else-if="message.media" class="flex items-center gap-3 mb-1 p-2 rounded-lg bg-white/5 border border-white/10">
+          <svg class="w-6 h-6 text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+            <polyline points="13 2 13 9 20 9" />
+          </svg>
+          <div class="flex flex-col overflow-hidden">
+            <span class="text-[10px] font-mono truncate text-text-bright">{{ message.media.title || 'Attached File' }}</span>
+            <a :href="message.media.url" target="_blank" class="text-[9px] font-mono text-blue-400 hover:underline">Download</a>
+          </div>
+        </div>
+
+        <p v-if="!message.media || message.media.media_type !== 'audio'" class="text-xs sm:text-sm leading-relaxed break-words whitespace-pre-wrap font-mono" :class="textClass">
           {{ message.is_deleted ? 'Signal lost' : message.body }}
         </p>
+        
         <span v-if="message.is_edited && !message.is_deleted" class="absolute -bottom-1 -right-1 text-[8px] font-mono bg-void/80 px-1 rounded border border-white/5 text-muted uppercase">edited</span>
       </div>
 
@@ -68,15 +89,24 @@
         </div>
       </div>
     </div>
+    
+    <ContextMenu
+      v-if="showMenu"
+      :items="menuItems"
+      :x="menuX"
+      :y="menuY"
+      @close="showMenu = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useMessengerStore } from '@/stores/messengerStore'
 import type { MessageResponseDTO } from '@/types'
 import ChatAvatar from './ChatAvatar.vue'
 import VoiceMessage from './VoiceMessage.vue'
+import ContextMenu from './ui/ContextMenu.vue'
 
 const COLOR_PALETTE = ['#4f7cff','#00e5ff','#52e07c','#ff6b35','#c084fc','#fb923c','#38bdf8','#f472b6']
 
@@ -88,6 +118,52 @@ const props = defineProps<{
 
 const store = useMessengerStore()
 const isOwn = computed(() => props.message.sender_uuid === store.currentUserId)
+
+const showMenu = ref(false)
+const menuX = ref(0)
+const menuY = ref(0)
+
+const handleContextMenu = (e: MouseEvent) => {
+  if (props.message.is_deleted) return
+  menuX.value = e.clientX
+  menuY.value = e.clientY
+  showMenu.value = true
+}
+
+const scrollToReply = () => {
+  if (props.message.reply_to_uuid) {
+    const el = document.getElementById(`msg-${props.message.reply_to_uuid}`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
+
+const menuItems = computed(() => {
+  const items = [
+    { 
+      label: 'Reply', 
+      icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5"/></svg>', 
+      action: () => { store.replyingToMessage = props.message } 
+    }
+  ]
+
+  if (isOwn.value) {
+    if (props.message.media?.media_type !== 'audio') {
+      items.push({ 
+        label: 'Edit', 
+        icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>', 
+        action: () => { store.editingMessage = props.message } 
+      })
+    }
+    items.push({ 
+      label: 'Delete', 
+      icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>', 
+      variant: 'danger' as const,
+      action: () => { store.deleteMessage(props.message.uuid) } 
+    })
+  }
+
+  return items
+})
 
 const senderColor = computed(() => {
   const uuid = props.message.sender_uuid || ''

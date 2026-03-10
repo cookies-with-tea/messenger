@@ -1,6 +1,6 @@
 <template>
 	<div class="flex flex-col h-full bg-transparent">
-		<ChatHeader :chat="store.activeChat!" />
+		<ChatHeader :chat="messenger.activeChat!" />
 
 		<!-- Messages -->
 		<div
@@ -10,21 +10,21 @@
 		>
       <div class="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-1 sm:space-y-1.5">
 			  <!-- Load more -->
-			  <div v-if="store.messagesLoading" class="flex justify-center py-2">
+			  <div v-if="messenger.messagesLoading" class="flex justify-center py-2">
 				  <span class="text-[10px] sm:text-xs font-mono text-muted animate-pulse font-bold tracking-widest uppercase">Scanning Stream...</span>
 			  </div>
 
-			  <template v-for="(group, idx) in groupedMessages" :key="idx">
+			  <template v-for="(group) in groupedMessages" :key="group.date">
 				  <div class="flex items-center gap-3 py-4">
 					  <div class="flex-1 h-px bg-white/5" />
 					  <span class="text-[9px] sm:text-[10px] font-mono font-black text-muted px-4 py-1 rounded-full glass border border-white/5 uppercase tracking-widest">{{ group.date }}</span>
 					  <div class="flex-1 h-px bg-white/5" />
 				  </div>
 
-				  <div v-for="(msg, mIdx) in group.messages" :key="msg.uuid" class="mb-0.5">
+				  <div v-for="(msg, mIdx) in group.messages" :key="msg.uuid" :id="`msg-${msg.uuid}`" class="mb-0.5">
 					  <MessageBubble
 						  :message="msg"
-						  :is-group="store.activeChat?.chat_type === 'group'"
+						  :is-group="messenger.activeChat?.chat_type === 'group'"
 						  :show-avatar="shouldShowAvatar(group.messages, mIdx)"
 					  />
 				  </div>
@@ -39,7 +39,7 @@
       </div>
 		</div>
 
-		<MessageInput @send="handleSend" @typing="store.sendTyping(true)" @stop-typing="store.sendTyping(false)" />
+		<MessageInput @send="handleSend" @typing="messenger.sendTyping(true)" @stop-typing="messenger.sendTyping(false)" />
 	</div>
 </template>
 
@@ -52,11 +52,11 @@ import MessageBubble from "./MessageBubble.vue";
 import MessageInput from "./MessageInput.vue";
 import TypingIndicator from "./TypingIndicator.vue";
 
-const store = useMessengerStore();
+const messenger = useMessengerStore();
 const bottomAnchor = ref<HTMLDivElement>();
 const messagesEl = ref<HTMLDivElement>();
 
-const typingUsers = computed(() => (store.activeChatId ? store.typingUsersFor(store.activeChatId) : []));
+const typingUsers = computed(() => (messenger.activeChatId ? messenger.typingUsersFor(messenger.activeChatId) : []));
 
 function shouldShowAvatar(messages: MessageResponseDTO[], idx: number): boolean {
 	if (idx === 0) return true;
@@ -66,7 +66,7 @@ function shouldShowAvatar(messages: MessageResponseDTO[], idx: number): boolean 
 const groupedMessages = computed(() => {
 	const groups: { date: string; messages: MessageResponseDTO[] }[] = [];
 	let current: { date: string; messages: MessageResponseDTO[] } | null = null;
-	for (const msg of store.activeMessages) {
+	for (const msg of messenger.activeMessages) {
 		const label = formatDate(new Date(msg.created_at));
 		if (!current || current.date !== label) {
 			current = { date: label, messages: [] };
@@ -98,30 +98,30 @@ let lastFetchedOldestUuid: string | null = null;
 
 // Load older messages on scroll to top
 async function onScroll() {
-	if (!messagesEl.value || store.messagesLoading || allLoaded.value) return;
+	if (!messagesEl.value || messenger.messagesLoading || allLoaded.value) return;
 	
 	if (messagesEl.value.scrollHeight <= messagesEl.value.clientHeight) return;
 
-	if (messagesEl.value.scrollTop < 60 && store.activeMessages.length > 0) {
-		const oldestUuid = store.activeMessages[0]?.uuid;
-		if (oldestUuid && store.activeChatId && oldestUuid !== lastFetchedOldestUuid) {
+	if (messagesEl.value.scrollTop < 60 && messenger.activeMessages.length > 0) {
+		const oldestUuid = messenger.activeMessages[0]?.uuid;
+		if (oldestUuid && messenger.activeChatId && oldestUuid !== lastFetchedOldestUuid) {
 			lastFetchedOldestUuid = oldestUuid;
-			const oldLength = store.activeMessages.length;
-			await store.fetchMessages(store.activeChatId, oldestUuid);
-			if (store.activeMessages.length === oldLength) {
+			const oldLength = messenger.activeMessages.length;
+			await messenger.fetchMessages(messenger.activeChatId, oldestUuid);
+			if (messenger.activeMessages.length === oldLength) {
 				allLoaded.value = true;
 			}
 		}
 	}
 }
 
-watch(() => store.activeChatId, () => {
+watch(() => messenger.activeChatId, () => {
 	lastFetchedOldestUuid = null;
 	allLoaded.value = false;
 });
 
 watch(
-	() => store.activeChatId,
+	() => messenger.activeChatId,
 	(v) => {
 		if (v) scrollToBottom(true);
 	},
@@ -129,7 +129,7 @@ watch(
 );
 
 watch(
-	() => store.activeMessages.length,
+	() => messenger.activeMessages.length,
 	() => scrollToBottom(),
 );
 
@@ -139,6 +139,6 @@ watch(
 );
 
 function handleSend(text: string) {
-	store.sendMessage(text);
+	messenger.sendMessage(text);
 }
 </script>
