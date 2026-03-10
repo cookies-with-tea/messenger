@@ -1,5 +1,5 @@
 <template>
-  <aside class="flex flex-col h-full bg-abyss border-r border-border">
+  <aside class="flex flex-col h-full bg-abyss border-r border-border w-full">
     <!-- Header -->
     <div class="flex items-center gap-3 px-4 py-4 border-b border-border">
       <span class="text-xl font-syne font-extrabold text-text-bright tracking-tight flex-1">pulsar</span>

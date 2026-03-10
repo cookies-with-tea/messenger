@@ -1,5 +1,15 @@
 <template>
   <div class="flex items-center gap-3 px-5 py-3.5 border-b border-border bg-abyss/80 backdrop-blur-sm">
+    <!-- Back Button for Mobile -->
+    <button
+      @click="goBack"
+      class="md:hidden p-2 -ml-2 rounded-lg text-text-dim hover:text-text-bright hover:bg-elevated transition-all"
+    >
+      <svg class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+      </svg>
+    </button>
+
     <ChatAvatar :chat="chatSender" :size="38" :show-status="isDirect" />
 
     <div class="flex-1 min-w-0">
@@ -27,11 +37,20 @@
 
 <script setup lang="ts">
 import { computed, defineComponent, h } from 'vue'
+import { useRouter } from 'vue-router'
+import { useMessengerStore } from '@/stores/messengerStore'
 import { useCallStore } from '@/stores/callStore'
 import type { ChatResponseDTO } from '@/types'
 import ChatAvatar from './ChatAvatar.vue'
 
 const props = defineProps<{ chat: ChatResponseDTO }>()
+const router = useRouter()
+const store = useMessengerStore()
+
+function goBack() {
+  store.activeChatId = null
+  router.push('/')
+}
 
 const isDirect = computed(() => props.chat.chat_type === 'direct')
 const chatSender = computed(() => props.chat.sender)

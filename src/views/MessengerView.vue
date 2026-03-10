@@ -1,12 +1,22 @@
 <template>
   <div class="flex h-screen overflow-hidden bg-void text-text-base font-syne antialiased">
-    <div class="w-72 shrink-0 flex flex-col overflow-hidden">
+    <!-- Sidebar: Hidden on mobile if a chat is active -->
+    <div 
+      class="w-full md:w-80 shrink-0 flex flex-col overflow-hidden border-r border-border"
+      :class="{ 'hidden md:flex': store.activeChatId }"
+    >
       <ChatSidebar />
     </div>
-    <main class="flex-1 overflow-hidden flex flex-col">
+
+    <!-- Main Content: Hidden on mobile if no chat is active -->
+    <main 
+      class="flex-1 overflow-hidden flex flex-col"
+      :class="{ 'hidden md:flex': !store.activeChatId }"
+    >
       <ChatWindow v-if="store.activeChat" />
-      <EmptyState v-else />
+      <EmptyState v-else class="hidden md:flex" />
     </main>
+    
     <!-- WebRTC Call Modal Overlay -->
     <CallModal />
   </div>
