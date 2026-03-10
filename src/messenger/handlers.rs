@@ -377,21 +377,27 @@ pub async fn get_chat(
             c.is_archived, c.created_at, c.updated_at,
             NULL::text AS last_message_body,
             NULL::timestamptz AS last_message_at,
-            NULL::bigint AS unread_count,
+            (SELECT COUNT(*) FROM message m WHERE m.chat_uuid = c.uuid
+                AND m.is_deleted = FALSE AND m.sender_uuid <> $2
+                AND NOT EXISTS (
+                    SELECT 1 FROM message_status ms
+                    WHERE ms.message_uuid = m.uuid AND ms.user_uuid = $2 AND ms.status = 'read'
+                )
+            ) AS unread_count,
             (SELECT COUNT(*) FROM chat_member cm WHERE cm.chat_uuid = $1 AND cm.left_at IS NULL) AS member_count,
 
             -- 👇 Собеседник
             cm_other.user_uuid           AS sender_uuid,
             gu.first_name                AS sender_first_name,
             gu.second_name               AS sender_second_name,
-            gu.avatar_uuid                    AS sender_avatar_uuid,
+            gu.avatar_uuid               AS sender_avatar_uuid,
             gu.last_seen_at              AS sender_last_seen_at
         FROM chat c
         JOIN chat_member cm ON cm.chat_uuid = c.uuid
-            AND cm.user_uuid = $1
+            AND cm.user_uuid = $2
             AND cm.left_at IS NULL
         LEFT JOIN chat_member cm_other ON cm_other.chat_uuid = c.uuid
-            AND cm_other.user_uuid != $1
+            AND cm_other.user_uuid != $2
             AND cm_other.left_at IS NULL
         LEFT JOIN guest_user gu ON gu.uuid = cm_other.user_uuid
         WHERE c.uuid = $1
@@ -1046,7 +1052,13 @@ pub async fn send_message(
             // 👇 Маппим в финальный DTO (загружаем аватар через вашу функцию)
             let msg = map_message_row(&state, row).await;
 
-            // Broadcast по WebSocket
+            // Broadcast по WebSocket (глобальный канал)
+            if let Some(user_ws) = &state.user_ws_state {
+                let members = get_chat_member_uuids(&state.pool, chat_uuid).await;
+                user_ws.broadcast_to_users(&members, WsServerEvent::NewMessage(msg.clone())).await;
+            }
+
+            // Legacy broadcast (для совместимости)
             if let Some(ws) = &state.ws_state {
                 let _ = ws.broadcast(chat_uuid, WsServerEvent::NewMessage(msg.clone()));
             }
@@ -1100,7 +1112,13 @@ pub async fn edit_message(
             // 👇 Маппим в финальный DTO
             let msg = map_message_row(&state, row).await;
 
-            // Broadcast по WebSocket
+            // Broadcast по WebSocket (глобальный)
+            if let Some(user_ws) = &state.user_ws_state {
+                let members = get_chat_member_uuids(&state.pool, chat_uuid).await;
+                user_ws.broadcast_to_users(&members, WsServerEvent::MessageEdited(msg.clone())).await;
+            }
+
+            // Legacy broadcast
             if let Some(ws) = &state.ws_state {
                 let _ = ws.broadcast(chat_uuid, WsServerEvent::MessageEdited(msg.clone()));
             }
@@ -1139,6 +1157,11 @@ pub async fn delete_message(
     if affected == 0 {
         let msg = state.i18n.t("messenger.message_not_found_or_forbidden", &locale).await;
         return into_api_response::<()>(StatusCode::NOT_FOUND, None, None, Some(vec![msg]));
+    }
+
+    if let Some(user_ws) = &state.user_ws_state {
+        let members = get_chat_member_uuids(&state.pool, chat_uuid).await;
+        user_ws.broadcast_to_users(&members, WsServerEvent::MessageDeleted { uuid: msg_uuid, chat_uuid }).await;
     }
 
     if let Some(ws) = &state.ws_state {
@@ -1305,7 +1328,15 @@ pub async fn ws_upgrade(
                         .ok()?;
 
                                let dto = map_message_row(&state_async, row).await;
-                               Some(WsServerEvent::NewMessage(dto))
+                               let event = WsServerEvent::NewMessage(dto);
+                               
+                               // Рассылаем через глобальный WS всем участникам
+                               if let Some(user_ws) = &state_async.user_ws_state {
+                                   let members = get_chat_member_uuids(&pool_async, msg_chat_uuid).await;
+                                   user_ws.broadcast_to_users(&members, event.clone()).await;
+                               }
+
+                               Some(event)
                     }
 
                     // ── Редактировать сообщение ──────────────────────────────
@@ -1495,7 +1526,12 @@ pub async fn ws_user_upgrade(
                     match action {
                         // ── Отправить сообщение ──────────────────────────────────
                         WsClientAction::SendMessage { chat_uuid, body, reply_to_uuid } => {
-                            if !assert_member(pool, chat_uuid, user_uuid).await { return; }
+                            if !assert_member(pool, chat_uuid, user_uuid).await {
+                                let _ = user_ws.send_to_user(user_uuid, WsServerEvent::Error { 
+                                    message: "You are not a member of this chat".into() 
+                                }).await;
+                                return;
+                            }
 
                             let row = sqlx::query_as::<_, MessageRow>(
                                 r#"WITH ins AS (
@@ -1524,11 +1560,18 @@ pub async fn ws_user_upgrade(
                             .fetch_one(pool)
                             .await;
 
-                            if let Ok(row) = row {
-                                let dto = map_message_row(&state_async, row).await;
-                                let event = WsServerEvent::NewMessage(dto);
-                                let members = get_chat_member_uuids(pool, chat_uuid).await;
-                                user_ws.broadcast_to_users(&members, event).await;
+                            match row {
+                                Ok(row) => {
+                                    let dto = map_message_row(&state_async, row).await;
+                                    let event = WsServerEvent::NewMessage(dto);
+                                    let members = get_chat_member_uuids(pool, chat_uuid).await;
+                                    user_ws.broadcast_to_users(&members, event).await;
+                                }
+                                Err(e) => {
+                                    let _ = user_ws.send_to_user(user_uuid, WsServerEvent::Error { 
+                                        message: "Database error while sending message".into() 
+                                    }).await;
+                                }
                             }
                         }
 
