@@ -12,11 +12,17 @@ use crate::core::dto::MediaDTO;
 
 #[derive(Debug, Serialize, Deserialize, FromRow, ToSchema, Clone)]
 pub struct UserPreviewDTO {
+    pub uuid: Uuid,
     pub first_name: Option<String>,
     pub second_name: Option<String>,
 
     #[sqlx(default)]
     pub avatar: Option<MediaDTO>,
+
+    #[sqlx(default)]
+    pub is_online: bool,
+    #[sqlx(default)]
+    pub last_seen_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, sqlx::Type)]
@@ -68,6 +74,8 @@ pub struct ChatRow {
     pub sender_second_name: Option<String>,
     #[sqlx(default)]
     pub sender_avatar_uuid: Option<Uuid>,
+    #[sqlx(default)]
+    pub sender_last_seen_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow, ToSchema, Clone)]
@@ -135,6 +143,8 @@ pub struct MessageRow {
     pub sender_second_name: Option<String>,
     #[sqlx(default)]
     pub sender_avatar_uuid: Option<Uuid>, // 👈 UUID (ссылка на media)
+    #[sqlx(default)]
+    pub sender_last_seen_at: Option<DateTime<Utc>>,
 
     // Статусы
     #[sqlx(default)]
@@ -164,6 +174,10 @@ pub struct ChatMemberDTO {
     pub last_name: Option<String>,
     #[sqlx(default)]
     pub avatar: Option<String>,
+    #[sqlx(default)]
+    pub is_online: bool,
+    #[sqlx(default)]
+    pub last_seen_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -242,6 +256,7 @@ pub enum WsServerEvent {
     Typing { chat_uuid: Uuid, user_uuid: Uuid, is_typing: bool },
     MemberJoined(ChatMemberDTO),
     MemberLeft { chat_uuid: Uuid, user_uuid: Uuid },
+    UserStatusChanged { user_uuid: Uuid, is_online: bool, last_seen_at: DateTime<Utc> },
     Error { message: String },
 }
 
@@ -249,12 +264,16 @@ pub enum WsServerEvent {
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(tag = "action", content = "payload", rename_all = "snake_case")]
 pub enum WsClientAction {
-    SendMessage { body: String, reply_to_uuid: Option<Uuid> },
-    EditMessage  { uuid: Uuid, body: String },
-    DeleteMessage { uuid: Uuid },
+    /// Отправить сообщение (глобальный WS — нужен chat_uuid)
+    SendMessage { chat_uuid: Uuid, body: String, reply_to_uuid: Option<Uuid> },
+    /// Редактировать сообщение
+    EditMessage  { chat_uuid: Uuid, uuid: Uuid, body: String },
+    /// Удалить сообщение
+    DeleteMessage { chat_uuid: Uuid, uuid: Uuid },
     MarkDelivered { chat_uuid: Uuid },
     MarkRead      { chat_uuid: Uuid },
-    Typing        { is_typing: bool },
+    /// is_typing + chat_uuid для глобального канала
+    Typing        { chat_uuid: Uuid, is_typing: bool },
 }
 
 

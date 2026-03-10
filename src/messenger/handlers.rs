@@ -1,4 +1,5 @@
 use std::{collections::HashMap, sync::Arc};
+use chrono::{DateTime, Utc};
 
 use axum::{
     Extension, Json, Router,
@@ -15,10 +16,10 @@ use crate::{AppState, auth::utils::get_user_from_token, core::{dto::{ApiPaginati
 use super::{
     dto::{
         AddMemberDTO, ChatMemberDTO, ChatResponseDTO, ChatType, CreateChatDTO, CreateMessageDTO,
-        DeliveryStatus, MessageQuery, MessageResponseDTO, UpdateChatDTO, UpdateMessageDTO,
+        DeliveryStatus, MessageQuery, MessageResponseDTO, UpdateMessageDTO,
         WsClientAction, WsServerEvent,
     },
-    ws::{WsState, handle_socket},
+    ws::{WsState, handle_socket, handle_user_socket},
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -40,8 +41,10 @@ async fn get_chat_response_dto(
             (SELECT COUNT(*) FROM chat_member cm WHERE cm.chat_uuid = c.uuid AND cm.left_at IS NULL) AS member_count,
             gu.uuid AS sender_uuid,
             gu.first_name AS sender_first_name,
+            gu.first_name AS sender_first_name,
             gu.second_name AS sender_second_name,
-            gu.avatar_uuid AS sender_avatar_uuid
+            gu.avatar_uuid AS sender_avatar_uuid,
+            gu.last_seen_at AS sender_last_seen_at
         FROM chat c
         LEFT JOIN guest_user gu ON gu.uuid = c.created_by
         WHERE c.uuid = $1
@@ -102,9 +105,12 @@ async fn map_message_row(
 
         // 👇 Вложенный sender
         sender: Some(UserPreviewDTO {
+            uuid: row.sender_uuid,
             first_name,
             second_name,
             avatar: sender_avatar,
+            is_online: if let Some(ws) = &state.user_ws_state { ws.is_online(row.sender_uuid).await } else { false },
+            last_seen_at: Utc::now(), // В MessageRow этого поля пока нет, но для превью пойдёт
         }),
 
         delivered_count: row.delivered_count,
@@ -169,10 +175,13 @@ fn map_chat_row(
         unread_count: row.unread_count,
         member_count: row.member_count,
 
-        sender: row.sender_uuid.map(|_| UserPreviewDTO {
+        sender: row.sender_uuid.map(|uuid| UserPreviewDTO {
+            uuid,
             first_name: row.sender_first_name,
             second_name: row.sender_second_name,
-            avatar: row.sender_avatar_uuid.and_then(|uuid| media_map.get(&uuid).cloned()),
+            avatar: row.sender_avatar_uuid.and_then(|u| media_map.get(&u).cloned()),
+            is_online: false, // Проставим в get_chats или get_chat где есть доступ к ws_state
+            last_seen_at: row.sender_last_seen_at.unwrap_or_else(Utc::now),
         }),
     }
 }
@@ -289,6 +298,12 @@ pub async fn get_chats(
             .ok()
             .flatten();
 
+        let is_online_val = if let (Some(ws), Some(uuid)) = (&state.user_ws_state, row.sender_uuid) {
+            ws.is_online(uuid).await
+        } else {
+            false
+        };
+
         items.push(ChatResponseDTO {
             uuid: row.uuid,
             name: row.name,
@@ -303,10 +318,13 @@ pub async fn get_chats(
             unread_count: row.unread_count,
             member_count: row.member_count,
 
-            sender: row.sender_uuid.map(|_| UserPreviewDTO {
+            sender: row.sender_uuid.map(|uuid| UserPreviewDTO {
+                uuid,
                 first_name: row.sender_first_name,
                 second_name: row.sender_second_name,
                 avatar: sender_avatar,
+                is_online: is_online_val,
+                last_seen_at: row.sender_last_seen_at.unwrap_or_else(Utc::now),
             }),
         });
     }
@@ -366,7 +384,8 @@ pub async fn get_chat(
             cm_other.user_uuid           AS sender_uuid,
             gu.first_name                AS sender_first_name,
             gu.second_name               AS sender_second_name,
-            gu.avatar_uuid                    AS sender_avatar_uuid
+            gu.avatar_uuid                    AS sender_avatar_uuid,
+            gu.last_seen_at              AS sender_last_seen_at
         FROM chat c
         JOIN chat_member cm ON cm.chat_uuid = c.uuid
             AND cm.user_uuid = $1
@@ -379,6 +398,7 @@ pub async fn get_chat(
         "#,
     )
     .bind(chat_uuid)
+    .bind(me)
     .fetch_optional(&state.pool)
     .await;
 
@@ -388,6 +408,12 @@ pub async fn get_chat(
                .await
                .ok()
                .flatten();
+
+           let is_online_val = if let (Some(ws), Some(uuid)) = (&state.user_ws_state, row.sender_uuid) {
+               ws.is_online(uuid).await
+           } else {
+               false
+           };
 
            let dto = ChatResponseDTO {
                uuid: row.uuid,
@@ -402,10 +428,13 @@ pub async fn get_chat(
                last_message_at: row.last_message_at,
                unread_count: row.unread_count,
                member_count: row.member_count,
-               sender: row.sender_uuid.map(|_| UserPreviewDTO {
+               sender: row.sender_uuid.map(|uuid| UserPreviewDTO {
+                   uuid,
                    first_name: row.sender_first_name,
                    second_name: row.sender_second_name,
                    avatar: sender_avatar,
+                   is_online: is_online_val,
+                   last_seen_at: row.sender_last_seen_at.unwrap_or_else(Utc::now),
                }),
            };
 
@@ -673,7 +702,8 @@ pub async fn get_members(
             cm.uuid, cm.chat_uuid, cm.user_uuid, cm.is_admin, cm.joined_at, cm.left_at,
             u.first_name,
             u.last_name,
-            u.avatar
+            u.avatar,
+            u.last_seen_at
         FROM chat_member cm
         JOIN guest_user u ON u.uuid = cm.user_uuid
         WHERE cm.chat_uuid = $1 AND cm.left_at IS NULL
@@ -685,7 +715,30 @@ pub async fn get_members(
     .await;
 
     match rows {
-        Ok(items) => into_api_response(StatusCode::OK, Some(items), None, None),
+        Ok(rows) => {
+            let mut items = Vec::with_capacity(rows.len());
+            for row in rows {
+                let is_online = if let Some(ws) = &state.user_ws_state {
+                    ws.is_online(row.user_uuid).await
+                } else {
+                    false
+                };
+                items.push(ChatMemberDTO {
+                    uuid: row.uuid,
+                    chat_uuid: row.chat_uuid,
+                    user_uuid: row.user_uuid,
+                    is_admin: row.is_admin,
+                    joined_at: row.joined_at,
+                    left_at: row.left_at,
+                    first_name: row.first_name,
+                    last_name: row.last_name,
+                    avatar: row.avatar,
+                    is_online,
+                    last_seen_at: row.last_seen_at,
+                });
+            }
+            into_api_response(StatusCode::OK, Some(items), None, None)
+        }
         Err(_) => {
             let msg = state.i18n.t("general.db_error", &locale).await;
             into_api_response(StatusCode::INTERNAL_SERVER_ERROR, None, Some(error_map("database", &msg)), Some(vec![msg]))
@@ -727,7 +780,7 @@ pub async fn add_member(
     match row {
         Ok(m) => {
             if let Some(ws) = &state.ws_state {
-                ws.broadcast(chat_uuid, WsServerEvent::MemberJoined(m.clone()));
+                let _ = ws.broadcast(chat_uuid, WsServerEvent::MemberJoined(m.clone()));
             }
             into_api_response(StatusCode::CREATED, Some(m), None, None)
         }
@@ -758,7 +811,7 @@ pub async fn remove_member(
     .await;
 
     if let Some(ws) = &state.ws_state {
-        ws.broadcast(chat_uuid, WsServerEvent::MemberLeft { chat_uuid, user_uuid: target });
+        let _ = ws.broadcast(chat_uuid, WsServerEvent::MemberLeft { chat_uuid, user_uuid: target });
     }
 
     into_api_response::<()>(StatusCode::OK, None, None, None)
@@ -775,6 +828,7 @@ const MSG_SELECT: &str = r#"
         gu.first_name  AS sender_first_name,
         gu.second_name AS sender_second_name,
         gu.avatar_uuid      AS sender_avatar_uuid,
+        gu.last_seen_at     AS sender_last_seen_at,
         (SELECT COUNT(*) FROM message_status ms1
             WHERE ms1.message_uuid = m.uuid AND ms1.status = 'delivered') AS delivered_count,
         (SELECT COUNT(*) FROM message_status ms2
@@ -901,9 +955,12 @@ pub async fn get_messages(
 
             // 👇 Вложенный sender
             sender: Some(UserPreviewDTO {
+                uuid: row.sender_uuid,
                 first_name,
                 second_name,
                 avatar: sender_avatar,
+                is_online: if let Some(ws) = &state.user_ws_state { ws.is_online(row.sender_uuid).await } else { false },
+                last_seen_at: row.sender_last_seen_at.unwrap_or_else(Utc::now),
             }),
 
             delivered_count: row.delivered_count,
@@ -991,7 +1048,7 @@ pub async fn send_message(
 
             // Broadcast по WebSocket
             if let Some(ws) = &state.ws_state {
-                ws.broadcast(chat_uuid, WsServerEvent::NewMessage(msg.clone()));
+                let _ = ws.broadcast(chat_uuid, WsServerEvent::NewMessage(msg.clone()));
             }
 
             into_api_response(StatusCode::CREATED, Some(msg), None, None)
@@ -1045,7 +1102,7 @@ pub async fn edit_message(
 
             // Broadcast по WebSocket
             if let Some(ws) = &state.ws_state {
-                ws.broadcast(chat_uuid, WsServerEvent::MessageEdited(msg.clone()));
+                let _ = ws.broadcast(chat_uuid, WsServerEvent::MessageEdited(msg.clone()));
             }
 
             into_api_response(StatusCode::OK, Some(msg), None, None)
@@ -1085,23 +1142,23 @@ pub async fn delete_message(
     }
 
     if let Some(ws) = &state.ws_state {
-        ws.broadcast(chat_uuid, WsServerEvent::MessageDeleted { uuid: msg_uuid, chat_uuid });
+        let _ = ws.broadcast(chat_uuid, WsServerEvent::MessageDeleted { uuid: msg_uuid, chat_uuid });
     }
     into_api_response::<()>(StatusCode::OK, None, None, None)
 }
 
 pub async fn mark_delivered(
     State(state): State<Arc<AppState>>,
-    Extension(locale): Extension<String>,
+    Extension(_locale): Extension<String>,
     Extension(me): Extension<Uuid>,
     Path(chat_uuid): Path<Uuid>,
 ) -> Result<Json<ApiResponse<()>>, (StatusCode, Json<ApiResponse<()>>)> {
     upsert_statuses(&state.pool, chat_uuid, me, DeliveryStatus::Delivered).await;
 
     if let Some(ws) = &state.ws_state {
-        ws.broadcast(chat_uuid, WsServerEvent::StatusUpdated {
+        let _ = ws.broadcast(chat_uuid, WsServerEvent::StatusUpdated {
             chat_uuid,
-            message_uuid: Uuid::nil(), // bulk — клиент сам обновляет весь чат
+            message_uuid: Uuid::nil(),
             user_uuid: me,
             status: DeliveryStatus::Delivered,
         });
@@ -1123,7 +1180,7 @@ pub async fn mark_read(
     upsert_statuses(&state.pool, chat_uuid, me, DeliveryStatus::Read).await;
 
     if let Some(ws) = &state.ws_state {
-        ws.broadcast(chat_uuid, WsServerEvent::StatusUpdated {
+        let _ = ws.broadcast(chat_uuid, WsServerEvent::StatusUpdated {
             chat_uuid,
             message_uuid: Uuid::nil(),
             user_uuid: me,
@@ -1219,8 +1276,7 @@ pub async fn ws_upgrade(
 
                 match action {
                     // ── Отправить сообщение ──────────────────────────────────
-                    WsClientAction::SendMessage { body, reply_to_uuid } => {
-                        // 👇 Загружаем как MessageRow, не MessageResponseDTO!
+                    WsClientAction::SendMessage { body, reply_to_uuid, chat_uuid: msg_chat_uuid } => {
                         let row = sqlx::query_as::<_, MessageRow>(
                             r#"WITH ins AS (
                                 INSERT INTO message (chat_uuid, sender_uuid, reply_to_uuid, body)
@@ -1240,7 +1296,7 @@ pub async fn ws_upgrade(
                             JOIN guest_user gu ON gu.uuid = m.sender_uuid
                             LEFT JOIN message reply ON reply.uuid = m.reply_to_uuid"#,
                         )
-                        .bind(chat_uuid)
+                        .bind(msg_chat_uuid)
                         .bind(user_uuid)
                         .bind(reply_to_uuid)
                         .bind(&body)
@@ -1253,7 +1309,7 @@ pub async fn ws_upgrade(
                     }
 
                     // ── Редактировать сообщение ──────────────────────────────
-                    WsClientAction::EditMessage { uuid, body } => {
+                    WsClientAction::EditMessage { uuid, body, chat_uuid: msg_chat_uuid } => {
                         let row = sqlx::query_as::<_, MessageRow>(
                             r#"WITH upd AS (
                                 UPDATE message SET body = $1, is_edited = TRUE
@@ -1280,12 +1336,13 @@ pub async fn ws_upgrade(
                         .ok()
                         .flatten()?;
 
+                        let _ = msg_chat_uuid; // используется в DTO через row.chat_uuid
                         let dto = map_message_row(&state_async, row).await;
                                   Some(WsServerEvent::MessageEdited(dto))
                     }
 
                     // ── Удалить сообщение ────────────────────────────────────
-                    WsClientAction::DeleteMessage { uuid } => {
+                    WsClientAction::DeleteMessage { uuid, chat_uuid: msg_chat_uuid } => {
                         sqlx::query(
                             "UPDATE message SET is_deleted = TRUE, body = ''
                              WHERE uuid = $1 AND sender_uuid = $2",
@@ -1296,14 +1353,14 @@ pub async fn ws_upgrade(
                         .await
                         .ok()
                         .filter(|r| r.rows_affected() > 0)
-                        .map(|_| WsServerEvent::MessageDeleted { uuid, chat_uuid })
+                        .map(|_| WsServerEvent::MessageDeleted { uuid, chat_uuid: msg_chat_uuid })
                     }
 
                     // ── Отметить доставленным ────────────────────────────────
-                    WsClientAction::MarkDelivered { chat_uuid } => {
-                        upsert_statuses(&pool, chat_uuid, user_uuid, DeliveryStatus::Delivered).await;
+                    WsClientAction::MarkDelivered { chat_uuid: msg_chat_uuid } => {
+                        upsert_statuses(&pool, msg_chat_uuid, user_uuid, DeliveryStatus::Delivered).await;
                         Some(WsServerEvent::StatusUpdated {
-                            chat_uuid,
+                            chat_uuid: msg_chat_uuid,
                             message_uuid: Uuid::nil(),
                             user_uuid,
                             status: DeliveryStatus::Delivered,
@@ -1311,10 +1368,10 @@ pub async fn ws_upgrade(
                     }
 
                     // ── Отметить прочитанным ─────────────────────────────────
-                    WsClientAction::MarkRead { chat_uuid } => {
-                        upsert_statuses(&pool, chat_uuid, user_uuid, DeliveryStatus::Read).await;
+                    WsClientAction::MarkRead { chat_uuid: msg_chat_uuid } => {
+                        upsert_statuses(&pool, msg_chat_uuid, user_uuid, DeliveryStatus::Read).await;
                         Some(WsServerEvent::StatusUpdated {
-                            chat_uuid,
+                            chat_uuid: msg_chat_uuid,
                             message_uuid: Uuid::nil(),
                             user_uuid,
                             status: DeliveryStatus::Read,
@@ -1322,12 +1379,257 @@ pub async fn ws_upgrade(
                     }
 
                     // ── Typing ───────────────────────────────────────────────
-                    WsClientAction::Typing { is_typing } => {
-                        Some(WsServerEvent::Typing { chat_uuid, user_uuid, is_typing })
+                    WsClientAction::Typing { is_typing, chat_uuid: msg_chat_uuid } => {
+                        Some(WsServerEvent::Typing { chat_uuid: msg_chat_uuid, user_uuid, is_typing })
                     }
                 }
             }
         })
+    })
+}
+
+// ════════════════════════════════════════════════════════════════
+// Global WS handler (per-user)
+// ════════════════════════════════════════════════════════════════
+
+/// Helper: найти всех участников чата
+async fn get_chat_member_uuids(pool: &PgPool, chat_uuid: Uuid) -> Vec<Uuid> {
+    sqlx::query_scalar::<_, Uuid>(
+        "SELECT user_uuid FROM chat_member WHERE chat_uuid = $1 AND left_at IS NULL",
+    )
+    .bind(chat_uuid)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default()
+}
+
+/// Разослать статус пользователя всем его контактам (участникам общих чатов)
+async fn broadcast_user_status(state: &Arc<AppState>, user_uuid: Uuid, is_online: bool) {
+    let pool = &state.pool;
+    let ws = match &state.user_ws_state {
+        Some(s) => s,
+        None => return,
+    };
+
+    let last_seen_at = Utc::now();
+
+    // 1. Обновляем в БД
+    let _ = sqlx::query("UPDATE guest_user SET last_seen_at = $1 WHERE uuid = $2")
+        .bind(last_seen_at)
+        .bind(user_uuid)
+        .execute(pool)
+        .await;
+
+    // 2. Находим контакты (люди из общих чатов)
+    let contacts: Vec<Uuid> = sqlx::query_scalar(
+        r#"
+        SELECT DISTINCT cm2.user_uuid
+        FROM chat_member cm1
+        JOIN chat_member cm2 ON cm2.chat_uuid = cm1.chat_uuid
+        WHERE cm1.user_uuid = $1 AND cm1.left_at IS NULL
+          AND cm2.user_uuid != $1 AND cm2.left_at IS NULL
+        "#
+    )
+    .bind(user_uuid)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    // 3. Рассылаем событие
+    let event = WsServerEvent::UserStatusChanged {
+        user_uuid,
+        is_online,
+        last_seen_at,
+    };
+
+    ws.broadcast_to_users(&contacts, event).await;
+}
+
+/// WebSocket upgrade для глобального real-time канала пользователя
+pub async fn ws_user_upgrade(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<WsQuery>,
+) -> impl IntoResponse {
+    let user_uuid = match get_user_from_token(&query.token) {
+        Ok(id) => id,
+        Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
+    };
+
+    let user_ws_state = match &state.user_ws_state {
+        Some(s) => s.clone(),
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    ws.on_upgrade(move |socket| {
+        let state_inner = state.clone();
+        let user_ws_state_for_handler = user_ws_state.clone();
+
+        async move {
+            broadcast_user_status(&state_inner, user_uuid, true).await;
+
+            let state_for_closure = state_inner.clone();
+            handle_user_socket(socket, user_uuid, user_ws_state_for_handler, move |user_uuid, raw| {
+                let state_async = state_for_closure.clone();
+
+                async move {
+                    let action: WsClientAction = match serde_json::from_str(&raw) {
+                        Ok(a) => a,
+                        Err(_) => {
+                            // Отправляем ошибку обратно пользователю
+                            state_async.user_ws_state.as_ref().map(|ws| {
+                                let ws = ws.clone();
+                                tokio::spawn(async move {
+                                    ws.send_to_user(user_uuid, WsServerEvent::Error {
+                                        message: "Invalid JSON. Expected {\"action\":\"...\",\"payload\":{...}}".into(),
+                                    }).await;
+                                });
+                            });
+                            return;
+                        }
+                    };
+
+                    let pool = &state_async.pool;
+                    let user_ws = state_async.user_ws_state.as_ref().unwrap();
+
+                    match action {
+                        // ── Отправить сообщение ──────────────────────────────────
+                        WsClientAction::SendMessage { chat_uuid, body, reply_to_uuid } => {
+                            if !assert_member(pool, chat_uuid, user_uuid).await { return; }
+
+                            let row = sqlx::query_as::<_, MessageRow>(
+                                r#"WITH ins AS (
+                                    INSERT INTO message (chat_uuid, sender_uuid, reply_to_uuid, body)
+                                    VALUES ($1, $2, $3, $4) RETURNING *
+                                )
+                                SELECT
+                                    m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid,
+                                    m.body, m.is_edited, m.is_deleted, m.created_at, m.updated_at,
+                                    gu.first_name  AS sender_first_name,
+                                    gu.second_name AS sender_second_name,
+                                    gu.avatar_uuid      AS sender_avatar_uuid,
+                                    gu.last_seen_at     AS sender_last_seen_at,
+                                    0::bigint      AS delivered_count,
+                                    0::bigint      AS read_count,
+                                    NULL::delivery_status AS my_status,
+                                    reply.body     AS reply_body_preview
+                                FROM ins m
+                                JOIN guest_user gu ON gu.uuid = m.sender_uuid
+                                LEFT JOIN message reply ON reply.uuid = m.reply_to_uuid"#,
+                            )
+                            .bind(chat_uuid)
+                            .bind(user_uuid)
+                            .bind(reply_to_uuid)
+                            .bind(&body)
+                            .fetch_one(pool)
+                            .await;
+
+                            if let Ok(row) = row {
+                                let dto = map_message_row(&state_async, row).await;
+                                let event = WsServerEvent::NewMessage(dto);
+                                let members = get_chat_member_uuids(pool, chat_uuid).await;
+                                user_ws.broadcast_to_users(&members, event).await;
+                            }
+                        }
+
+                        // ── Редактировать сообщение ──────────────────────────────
+                        WsClientAction::EditMessage { chat_uuid, uuid, body } => {
+                            if !assert_member(pool, chat_uuid, user_uuid).await { return; }
+
+                            let row = sqlx::query_as::<_, MessageRow>(
+                                r#"WITH upd AS (
+                                    UPDATE message SET body = $1, is_edited = TRUE
+                                    WHERE uuid = $2 AND sender_uuid = $3 AND is_deleted = FALSE
+                                    RETURNING *
+                                )
+                                SELECT
+                                    m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid,
+                                    m.body, m.is_edited, m.is_deleted, m.created_at, m.updated_at,
+                                    gu.first_name  AS sender_first_name,
+                                    gu.second_name AS sender_second_name,
+                                    gu.avatar_uuid      AS sender_avatar_uuid,
+                                    gu.last_seen_at     AS sender_last_seen_at,
+                                    0::bigint      AS delivered_count,
+                                    0::bigint      AS read_count,
+                                    NULL::delivery_status AS my_status,
+                                    NULL::text     AS reply_body_preview
+                                FROM upd m JOIN guest_user gu ON gu.uuid = m.sender_uuid"#,
+                            )
+                            .bind(&body)
+                            .bind(uuid)
+                            .bind(user_uuid)
+                            .fetch_optional(pool)
+                            .await;
+
+                            if let Ok(Some(row)) = row {
+                                let dto = map_message_row(&state_async, row).await;
+                                let event = WsServerEvent::MessageEdited(dto);
+                                let members = get_chat_member_uuids(pool, chat_uuid).await;
+                                user_ws.broadcast_to_users(&members, event).await;
+                            }
+                        }
+
+                        // ── Удалить сообщение ────────────────────────────────────
+                        WsClientAction::DeleteMessage { chat_uuid, uuid } => {
+                            if !assert_member(pool, chat_uuid, user_uuid).await { return; }
+
+                            let affected = sqlx::query(
+                                "UPDATE message SET is_deleted = TRUE, body = '' WHERE uuid = $1 AND sender_uuid = $2",
+                            )
+                            .bind(uuid)
+                            .bind(user_uuid)
+                            .execute(pool)
+                            .await
+                            .map(|r| r.rows_affected())
+                            .unwrap_or(0);
+
+                            if affected > 0 {
+                                let event = WsServerEvent::MessageDeleted { uuid, chat_uuid };
+                                let members = get_chat_member_uuids(pool, chat_uuid).await;
+                                user_ws.broadcast_to_users(&members, event).await;
+                            }
+                        }
+
+                        // ── Отметить доставленным ────────────────────────────────
+                        WsClientAction::MarkDelivered { chat_uuid } => {
+                            upsert_statuses(pool, chat_uuid, user_uuid, DeliveryStatus::Delivered).await;
+                            let event = WsServerEvent::StatusUpdated {
+                                chat_uuid,
+                                message_uuid: Uuid::nil(),
+                                user_uuid,
+                                status: DeliveryStatus::Delivered,
+                            };
+                            let members = get_chat_member_uuids(pool, chat_uuid).await;
+                            user_ws.broadcast_to_users(&members, event).await;
+                        }
+
+                        // ── Отметить прочитанным ─────────────────────────────────
+                        WsClientAction::MarkRead { chat_uuid } => {
+                            upsert_statuses(pool, chat_uuid, user_uuid, DeliveryStatus::Read).await;
+                            let event = WsServerEvent::StatusUpdated {
+                                chat_uuid,
+                                message_uuid: Uuid::nil(),
+                                user_uuid,
+                                status: DeliveryStatus::Read,
+                            };
+                            let members = get_chat_member_uuids(pool, chat_uuid).await;
+                            user_ws.broadcast_to_users(&members, event).await;
+                        }
+
+                        // ── Typing ───────────────────────────────────────────────
+                        WsClientAction::Typing { chat_uuid, is_typing } => {
+                            let event = WsServerEvent::Typing { chat_uuid, user_uuid, is_typing };
+                            let members = get_chat_member_uuids(pool, chat_uuid).await;
+                            // Typing шлём всем кроме себя — фильтрация на клиенте
+                            user_ws.broadcast_to_users(&members, event).await;
+                        }
+                    }
+                }
+            }).await;
+
+            // 👇 Уведомляем об офлайне
+            broadcast_user_status(&state_inner, user_uuid, false).await;
+        }
     })
 }
 
@@ -1354,4 +1656,10 @@ pub fn router() -> Router<Arc<AppState>> {
 pub fn ws_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/{chat_uuid}", routing::get(ws_upgrade))
+}
+
+/// Глобальный WS-роутер — один канал на пользователя
+pub fn ws_user_router() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/", routing::get(ws_user_upgrade))
 }

@@ -12,6 +12,7 @@ use crate::core::db::create_pool;
 use crate::i18n::middlewares::locale_middleware;
 use crate::i18n::I18nService;
 use crate::messenger::WsState;
+use crate::messenger::ws::UserWsState;
 use axum::Router;
 use axum::{http::HeaderValue, middleware};
 use sqlx::{Pool, Postgres};
@@ -43,6 +44,7 @@ struct AppState {
     smtp_from: String,
 
     ws_state: Option<WsState>,
+    user_ws_state: Option<UserWsState>,
 }
 
 #[derive(OpenApi)]
@@ -149,6 +151,7 @@ async fn main() {
         smtp_from,
 
         ws_state: Some(WsState::new()),
+        user_ws_state: Some(UserWsState::new()),
     });
 
     let cors = {
@@ -198,7 +201,8 @@ async fn main() {
         .nest("/api/v1/i18n",  i18n::handlers::public_router())
         .nest("/api/v1/media", media::handlers::router())
         .nest("/ws/chats", messenger::handlers::ws_router())
-        .nest("/ws/test", messenger::ws_echo::echo_router())
+        .nest("/ws/user",  messenger::handlers::ws_user_router())
+        .nest("/ws/test",  messenger::ws_echo::echo_router())
         .nest_service(
             "/media",
             ServeDir::new("media").fallback(ServeDir::new("media/image")),

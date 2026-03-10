@@ -1,0 +1,211 @@
+warning: unused import: `DateTime`
+ --> src\messenger\handlers.rs:2:14
+  |
+2 | use chrono::{DateTime, Utc};
+  |              ^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `State`
+ --> src\messenger\ws_echo.rs:5:9
+  |
+5 |         State,
+  |         ^^^^^
+
+warning: unused import: `StreamExt`
+  --> src\messenger\ws_echo.rs:11:24
+   |
+11 | use futures::{SinkExt, StreamExt};
+   |                        ^^^^^^^^^
+
+warning: unused imports: `router` and `ws_router`
+  --> src\messenger\mod.rs:79:20
+   |
+79 | pub use handlers::{router, ws_router};
+   |                    ^^^^^^  ^^^^^^^^^
+
+warning: unused import: `PaginationQuery`
+ --> src\user\handlers.rs:1:97
+  |
+1 | ...on, PaginationDTO, PaginationQuery};
+  |                       ^^^^^^^^^^^^^^^
+
+warning: unused imports: `patch` and `post`
+  --> src\user\handlers.rs:14:20
+   |
+14 |     routing::{get, patch, post},
+   |                    ^^^^^  ^^^^
+
+warning: unused variable: `e`
+   --> src\messenger\handlers.rs:281:13
+    |
+281 |         Err(e) => {
+    |             ^ help: if this is intentional, prefix it with an underscore: `_e`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `pool_async`
+    --> src\messenger\handlers.rs:1264:17
+     |
+1264 |             let pool_async = pool_inner.clone();
+     |                 ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_pool_async`
+
+warning: unused variable: `chat_uuid`
+    --> src\messenger\handlers.rs:1262:69
+     |
+1262 | ... ws_state, move |chat_uuid, user_uuid, raw| {
+     |                     ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_chat_uuid`
+
+warning: unused variable: `email`
+   --> src\user\handlers.rs:498:25
+    |
+498 |             if let Some(email) = &payload.email {
+    |                         ^^^^^ help: if this is intentional, prefix it with an underscore: `_email`
+
+warning: unused variable: `phone`
+   --> src\user\handlers.rs:503:25
+    |
+503 |             if let Some(phone) = &payload.phone {
+    |                         ^^^^^ help: if this is intentional, prefix it with an underscore: `_phone`
+
+warning: unused variable: `first_name`
+   --> src\user\handlers.rs:508:25
+    |
+508 | ...     if let Some(first_name) = &payload.first_name {
+    |                     ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_first_name`
+
+warning: unused variable: `second_name`
+   --> src\user\handlers.rs:513:25
+    |
+513 | ...     if let Some(second_name) = &payload.second_name {
+    |                     ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_second_name`
+
+warning: unused variable: `last_name`
+   --> src\user\handlers.rs:518:25
+    |
+518 |             if let Some(last_name) = &payload.last_name {
+    |                         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_last_name`
+
+warning: unused variable: `birth_date`
+   --> src\user\handlers.rs:523:25
+    |
+523 | ...     if let Some(birth_date) = &payload.birth_date {
+    |                     ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_birth_date`
+
+warning: unused variable: `role`
+   --> src\user\handlers.rs:528:25
+    |
+528 |             if let Some(role) = &payload.role {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_role`
+
+warning: unused variable: `status`
+   --> src\user\handlers.rs:533:25
+    |
+533 |             if let Some(status) = &payload.status {
+    |                         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_status`
+
+warning: unused variable: `avatar`
+   --> src\user\handlers.rs:538:25
+    |
+538 |             if let Some(avatar) = &payload.avatar {
+    |                         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_avatar`
+
+warning: unused variable: `street`
+   --> src\user\handlers.rs:543:25
+    |
+543 |             if let Some(street) = &payload.street {
+    |                         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_street`
+
+warning: unused variable: `gender`
+   --> src\user\handlers.rs:548:25
+    |
+548 |             if let Some(gender) = &payload.gender {
+    |                         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_gender`
+
+warning: unused variable: `city`
+   --> src\user\handlers.rs:553:25
+    |
+553 |             if let Some(city) = &payload.city {
+    |                         ^^^^ help: if this is intentional, prefix it with an underscore: `_city`
+
+warning: variable `bind_param_index` is assigned to, but never used
+   --> src\user\handlers.rs:572:21
+    |
+572 |             let mut bind_param_index = 1;
+    |                     ^^^^^^^^^^^^^^^^
+    |
+    = note: consider using `_bind_param_index` instead
+
+warning: value assigned to `bind_param_index` is never read
+   --> src\user\handlers.rs:630:17
+    |
+630 |                 bind_param_index += 1;
+    |                 ^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `SinkExt`
+  --> src\messenger\ws_echo.rs:11:15
+   |
+11 | use futures::{SinkExt, StreamExt};
+   |               ^^^^^^^
+
+warning: struct `IconTextDTO` is never constructed
+  --> src\core\dto.rs:42:12
+   |
+42 | pub struct IconTextDTO {
+   |            ^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `AttractionRowDTO` is never constructed
+  --> src\core\dto.rs:56:12
+   |
+56 | pub struct AttractionRowDTO {
+   |            ^^^^^^^^^^^^^^^^
+
+warning: struct `AttractionDTO` is never constructed
+  --> src\core\dto.rs:63:12
+   |
+63 | pub struct AttractionDTO {
+   |            ^^^^^^^^^^^^^
+
+warning: function `format_number_with_spaces` is never used
+ --> src\core\utils.rs:1:8
+  |
+1 | pub fn format_number_with_spaces(input: &str) -> String {
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `get_media` is never used
+ --> src\core\handlers.rs:6:14
+  |
+6 | pub async fn get_media(
+  |              ^^^^^^^^^
+
+warning: fields `name`, `description`, `avatar`, and `is_archived` are never read
+   --> src\messenger\dto.rs:117:9
+    |
+116 | pub struct UpdateChatDTO {
+    |            ------------- fields in this struct
+117 |     pub name: Option<String>,
+    |         ^^^^
+118 |     pub description: Option<String>,
+    |         ^^^^^^^^^^^
+119 |     pub avatar: Option<String>,
+    |         ^^^^^^
+120 |     pub is_archived: Option<bool>,
+    |         ^^^^^^^^^^^
+    |
+    = note: `UpdateChatDTO` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: function `validate_password` is never used
+  --> src\user\utils.rs:13:8
+   |
+13 | pub fn validate_password(password: &str) -> bool {
+   |        ^^^^^^^^^^^^^^^^^
+
+warning: `messenger` (bin "messenger") generated 31 warnings (run `cargo fix --bin "messenger"` to apply 6 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.42s
+warning: the following packages contain code that will be rejected by a future version of Rust: sqlx-postgres v0.7.4
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
