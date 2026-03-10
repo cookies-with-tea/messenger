@@ -10,7 +10,7 @@
         class="w-7 h-7 rounded-full bg-elevated border border-border flex items-center justify-center text-xs select-none"
         :style="{ color: senderColor }"
       >
-      	<ChatAvatar :chat="props.message.sender" :size="28" />
+      	<ChatAvatar :chat="message.sender" :size="28" />
       </div>
     </div>
 
@@ -46,7 +46,19 @@
       <!-- Meta -->
       <div class="flex items-center gap-1.5 px-1" :class="isOwn ? 'flex-row-reverse' : 'flex-row'">
         <span class="text-[10px] font-mono text-muted">{{ timeLabel }}</span>
-        <span v-if="isOwn" class="text-[10px]" :class="statusClass">{{ statusIcon }}</span>
+        <div v-if="isOwn" class="flex" :class="statusClass">
+          <svg v-if="message.my_status === 'read'" class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
+            <path d="M10.354 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L2.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
+          </svg>
+          <svg v-else-if="message.my_status === 'delivered'" class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
+            <path d="M10.354 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L2.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
+          </svg>
+          <svg v-else class="w-2.5 h-2.5" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
+          </svg>
+        </div>
       </div>
     </div>
   </div>
@@ -74,14 +86,10 @@ const senderColor = computed(() => {
   return COLOR_PALETTE[idx]
 })
 
-const senderInitial = computed(() => {
-  const name = [props.message.sender_first_name, props.message.sender_last_name].filter(Boolean).join(' ')
-  return name ? name[0].toUpperCase() : '?'
+const senderDisplayName = computed(() => {
+  if (!props.message.sender) return props.message.sender_uuid
+  return [props.message.sender.first_name, props.message.sender.second_name].filter(Boolean).join(' ') || props.message.sender_uuid
 })
-
-const senderDisplayName = computed(() =>
-  [props.message.sender_first_name, props.message.sender_last_name].filter(Boolean).join(' ') || props.message.sender_uuid
-)
 
 const bubbleClass = computed(() =>
   isOwn.value
@@ -95,16 +103,8 @@ const timeLabel = computed(() => {
   return d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false })
 })
 
-const statusIcon = computed(() => {
-  const s = props.message.my_status
-  if (!s)              return '○'  // sent, not yet delivered
-  if (s === 'delivered') return '✓✓'
-  if (s === 'read')      return '✓✓'
-  return '✓'
-})
-
 const statusClass = computed(() => ({
-  'text-muted': props.message.my_status !== 'read',
-  'text-neon':  props.message.my_status === 'read',
+  'text-white/50': props.message.my_status !== 'read',
+  'text-sage':  props.message.my_status === 'read',
 }))
 </script>

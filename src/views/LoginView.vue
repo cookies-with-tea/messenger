@@ -49,9 +49,16 @@ async function submit() {
     const res = await authApi.login(email.value.trim(), password.value)
     if (res.data) {
       tokenStore.setTokens(res.data)
-      // reload store so currentUserId picks up new JWT
+      // Токен уже в localStorage — store подхватит currentUserId из него
       const store = useMessengerStore()
-      store.$reset?.()
+      store.currentUserId = (() => {
+        try {
+          const p = JSON.parse(atob(res.data.access_token.split('.')[1] ?? ''))
+          return p.sub ?? p.uuid ?? p.id ?? ''
+        } catch { return '' }
+      })()
+      // Открываем глобальный WS-канал сразу после логина
+      store.initWs()
       const redirect = (route.query.redirect as string) || '/'
       router.push(redirect)
     } else {

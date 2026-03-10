@@ -51,6 +51,35 @@
         <span class="text-sm font-mono">No chats found</span>
       </div>
     </div>
+
+    <!-- User Profile & Logout -->
+    <div class="p-3 border-t border-border bg-surface/30">
+      <div class="flex items-center gap-3 p-2 rounded-xl bg-elevated/50 border border-border/50 group">
+        <div class="relative">
+          <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-pulse/20 to-pulse/5 flex items-center justify-center border border-pulse/20 text-pulse font-bold text-sm shadow-[0_0_15px_rgba(var(--color-pulse),0.1)]">
+            {{ store.currentUserId.slice(0, 2).toUpperCase() }}
+          </div>
+          <div class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-pulse rounded-full border-2 border-abyss shadow-[0_0_8px_rgba(var(--color-pulse),0.5)]"></div>
+        </div>
+        
+        <div class="flex-1 min-w-0">
+          <div class="text-xs font-mono text-muted truncate">Logged in as</div>
+          <div class="text-xs font-mono text-text-base truncate font-bold">{{ store.currentUserId.split('-')[0] }}...</div>
+        </div>
+
+        <button
+          @click="handleLogout"
+          class="p-2 rounded-lg text-text-dim hover:text-ember hover:bg-ember/10 border border-transparent hover:border-ember/20 transition-all group-hover:opacity-100 opacity-60 flex items-center justify-center"
+          title="Logout"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+        </button>
+      </div>
+    </div>
   </aside>
 </template>
 
@@ -80,5 +109,11 @@ const selectChat = (uuid: string) => {
 	store.selectChat(uuid)
 
 	router.push(`/chat/${uuid}`);
+}
+
+const handleLogout = () => {
+  if (confirm('Are you sure you want to logout?')) {
+    store.logout();
+  }
 }
 </script>

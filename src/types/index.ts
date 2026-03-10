@@ -4,13 +4,21 @@ export type DeliveryStatus = 'delivered' | 'read'
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
 // ─── Backend DTOs ─────────────────────────────────────────────────
+export interface UserPreviewDTO {
+  uuid: string
+  first_name: string | null
+  second_name: string | null
+  avatar: { url: string; alt?: string; title?: string } | null
+  is_online: boolean
+  last_seen_at: string
+}
+
 export interface ChatResponseDTO {
   uuid: string
   name: string | null
   description: string | null
   chat_type: ChatType
   created_by: string
-  avatar: string | null
   is_archived: boolean
   created_at: string
   updated_at: string
@@ -18,6 +26,7 @@ export interface ChatResponseDTO {
   last_message_at: string | null
   unread_count: number | null
   member_count: number | null
+  sender: UserPreviewDTO | null
 }
 
 export interface ChatMemberDTO {
@@ -30,6 +39,8 @@ export interface ChatMemberDTO {
   first_name: string | null
   last_name: string | null
   avatar: string | null
+  is_online: boolean
+  last_seen_at: string
 }
 
 export interface MessageResponseDTO {
@@ -42,9 +53,7 @@ export interface MessageResponseDTO {
   is_deleted: boolean
   created_at: string
   updated_at: string
-  sender_first_name: string | null
-  sender_last_name: string | null
-  sender_avatar: string | null
+  sender: UserPreviewDTO | null
   delivered_count: number | null
   read_count: number | null
   my_status: DeliveryStatus | null
@@ -78,7 +87,9 @@ export type WsServerEvent =
   | { event: 'typing';          payload: { chat_uuid: string; user_uuid: string; is_typing: boolean } }
   | { event: 'member_joined';   payload: ChatMemberDTO }
   | { event: 'member_left';     payload: { chat_uuid: string; user_uuid: string } }
+  | { event: 'user_status_changed'; payload: { user_uuid: string; is_online: boolean; last_seen_at: string } }
   | { event: 'error';           payload: { message: string } }
+  | { event: 'pong' }
 
 // ─── WebSocket (клиент → сервер) ──────────────────────────────────
 export type WsClientAction =

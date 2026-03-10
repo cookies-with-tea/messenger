@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import { ref, computed, watch } from "vue";
 import { useWebSocket } from "@vueuse/core";
 import type { ChatResponseDTO, ChatMemberDTO, MessageResponseDTO, DeliveryStatus, WsServerEvent } from "@/types";
-import { chatApi, messageApi, wsUrl } from "@/api";
+import { chatApi, messageApi, wsUserUrl, tokenStore } from "@/api";
 import { useRouter } from "vue-router";
 
 // UUID текущего пользователя — берётся из JWT payload
@@ -10,7 +10,9 @@ function parseCurrentUserId(): string {
 	try {
 		const token = localStorage.getItem("access_token") ?? "";
 		if (!token) return "";
-		const payload = JSON.parse(atob(token.split(".")[1]));
+		const parts = token.split(".");
+		if (parts.length < 2) return "";
+		const payload = JSON.parse(atob(parts[1]));
 		return payload.sub ?? payload.uuid ?? payload.id ?? "";
 	} catch {
 		return "";
@@ -36,21 +38,15 @@ export const useMessengerStore = defineStore("messenger", () => {
 	// uuid → Set<user_uuid> кто сейчас печатает
 	const typingMap = ref<Map<string, Set<string>>>(new Map());
 
-	// ─── Computed: Динамический URL для WebSocket ─────────────────────
-	// VueUse автоматически переподключится, когда изменится activeChatId
-	const currentWsUrl = computed(() => {
-		if (!activeChatId.value) return '';
-		return wsUrl(activeChatId.value);
-	});
-
-	// ─── WebSocket Instance (VueUse) ──────────────────────────────────
-	// immediate: false, чтобы не подключаться, пока нет активного чата
-	// Мы контролируем подключение через watch или просто привязку к computed
-	const { status, data, send, open, close } = useWebSocket(currentWsUrl, {
-		immediate: false, // Подключаемся вручную при смене чата
+	// ─── Global WebSocket (per-user) ──────────────────────────────────
+	// Подключается один раз при логине, получает события по всем чатам.
+	// immediate: false — открываем вручную через initWs()
+	const wsEndpoint = computed(() => wsUserUrl());
+	const { status, data, send, open, close } = useWebSocket(wsEndpoint, {
+		immediate: false,
 		autoReconnect: {
-			delay: 1000,
-			retries: 3,
+			delay: 2000,
+			retries: 10,
 		},
 		heartbeat: {
 			message: JSON.stringify({ action: "ping" }),
@@ -73,17 +69,24 @@ export const useMessengerStore = defineStore("messenger", () => {
 	}
 
 	// ─── WebSocket Message Handler ────────────────────────────────────
-	// Обрабатываем входящие сообщения глобально для текущего сокета
 	function handleWsMessage(event: string) {
 		try {
-			const raw = event;
-			const ev: WsServerEvent = JSON.parse(raw);
+			const ev: WsServerEvent = JSON.parse(event);
 
 			switch (ev.event) {
-				case "new_message":
-					_appendMessage(ev.payload);
-					_bumpChat(ev.payload.chat_uuid, ev.payload.body, ev.payload.created_at);
+				case "new_message": {
+					const msg = ev.payload;
+					_appendMessage(msg);
+					_bumpChat(msg.chat_uuid, msg.body, msg.created_at);
+					
+					// Авто-подтверждение получения/прочтения
+					if (msg.chat_uuid === activeChatId.value) {
+						markRead(msg.chat_uuid);
+					} else {
+						markDelivered(msg.chat_uuid);
+					}
 					break;
+				}
 
 				case "message_edited":
 					_replaceMessage(ev.payload);
@@ -106,6 +109,12 @@ export const useMessengerStore = defineStore("messenger", () => {
 					break;
 				}
 
+				case "user_status_changed": {
+					const { user_uuid, is_online, last_seen_at } = ev.payload;
+					_updateUserStatus(user_uuid, is_online, last_seen_at);
+					break;
+				}
+
 				case "error":
 					console.error("[WS Error]", ev.payload.message);
 					break;
@@ -115,19 +124,25 @@ export const useMessengerStore = defineStore("messenger", () => {
 					break;
 
 				default:
-					console.warn("[WS] Unknown event:", ev.event);
+					console.warn("[WS] Unknown event:", (ev as any).event);
 			}
 		} catch (e) {
 			console.error("[WS] Failed to parse message:", e);
 		}
 	}
 
-	// Подписываемся на данные только когда сокет активен
+	// Подписываемся на входящие сообщения глобального WS
 	watch(data, (newData) => {
 		if (newData) {
 			handleWsMessage(newData);
 		}
 	});
+
+	// ─── Init WS (вызывать после логина) ─────────────────────────────
+	function initWs() {
+		if (status.value === "OPEN" || status.value === "CONNECTING") return;
+		open();
+	}
 
 	// ─── Load chats ───────────────────────────────────────────────────
 	async function fetchChats() {
@@ -141,16 +156,10 @@ export const useMessengerStore = defineStore("messenger", () => {
 	}
 
 	// ─── Select & open chat ───────────────────────────────────────────
+	// WS НЕ переподключается — он глобальный и уже открыт
 	async function selectChat(chatUuid: string) {
-		// Если переходим в тот же чат, ничего не делаем
 		if (activeChatId.value === chatUuid) return;
 
-		// Смена активного чата автоматически триггерит изменение currentWsUrl
-		// Но нам нужно явно закрыть старый сокет и открыть новый,
-		// так как useWebSocket с computed URL может вести себя по-разному в зависимости от версии.
-		// Надежный паттерн: close -> change ID -> open
-
-		close();
 		activeChatId.value = chatUuid;
 
 		// Reset unread locally
@@ -162,13 +171,9 @@ export const useMessengerStore = defineStore("messenger", () => {
 			await fetchMessages(chatUuid);
 		}
 
-		// Mark as read via API
-		messageApi.markRead(chatUuid).catch(() => {});
-
-		// Открываем новое соединение для нового URL
-		// Небольшая задержка иногда нужна, чтобы computed успел обновиться,
-		// но обычно open() сразу берет актуальное значение
-		setTimeout(() => open(), 0);
+		// Mark as read via WS and API
+		markRead(chatUuid);
+		messageApi.markRead(chatUuid).catch(() => { });
 	}
 
 	// ─── Load messages ────────────────────────────────────────────────
@@ -188,33 +193,25 @@ export const useMessengerStore = defineStore("messenger", () => {
 		}
 	}
 
-	// -- Load message by uuid ---
-	async function fetchMessage(chatUuid: string) {
-		const res = await messageApi.getByUuid(chatUuid);
-		if (res.data) _appendMessage(res.data);
-	}
-
-	// ─── Send message via WS ──────────────────────────────────────────
+	// ─── Send message via global WS ───────────────────────────────────
 	async function sendMessage(body: string, replyToUuid?: string) {
 		const chatUuid = activeChatId.value;
 		if (!chatUuid || !body.trim()) return;
 
-		// Проверка статуса соединения
 		if (status.value !== "OPEN") {
-			// Попытка переподключения или фоллбэк на REST
-			console.warn("WS not open, trying fallback or reconnect");
-			// Можно попробовать open() здесь, если соединение разорвалось
+			console.warn("[WS] Not connected, trying to reconnect...");
+			open();
+			return;
 		}
 
-		const payload = {
+		send(JSON.stringify({
 			action: "send_message",
-			payload: { body: body.trim(), reply_to_uuid: replyToUuid ?? null },
-		};
-
-		send(JSON.stringify(payload));
-
-		// Оптимистичное обновление можно добавить здесь, если сервер не эхо-ответит мгновенно,
-		// но в вашей архитектуре сервер присылает new_message, так что ждем события.
+			payload: {
+				chat_uuid: chatUuid,
+				body: body.trim(),
+				reply_to_uuid: replyToUuid ?? null,
+			},
+		}));
 	}
 
 	// ─── Edit message ─────────────────────────────────────────────────
@@ -224,7 +221,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 
 		send(JSON.stringify({
 			action: "edit_message",
-			payload: { uuid: msgUuid, body },
+			payload: { chat_uuid: chatUuid, uuid: msgUuid, body },
 		}));
 	}
 
@@ -235,18 +232,37 @@ export const useMessengerStore = defineStore("messenger", () => {
 
 		send(JSON.stringify({
 			action: "delete_message",
-			payload: { uuid: msgUuid },
+			payload: { chat_uuid: chatUuid, uuid: msgUuid },
 		}));
 	}
 
 	// ─── Typing events ────────────────────────────────────────────────
 	function sendTyping(isTyping: boolean) {
 		const chatUuid = activeChatId.value;
-		if (!chatUuid) return;
+		if (!chatUuid || status.value !== "OPEN") return;
 
 		send(JSON.stringify({
 			action: "typing",
-			payload: { is_typing: isTyping },
+			payload: { chat_uuid: chatUuid, is_typing: isTyping },
+		}));
+	}
+
+	function markRead(chatUuid: string) {
+		if (status.value !== "OPEN") return;
+		send(JSON.stringify({
+			action: "mark_read",
+			payload: { chat_uuid: chatUuid },
+		}));
+		// Сбрасываем счетчик локально
+		const chat = chats.value.find(c => c.uuid === chatUuid);
+		if (chat) chat.unread_count = 0;
+	}
+
+	function markDelivered(chatUuid: string) {
+		if (status.value !== "OPEN") return;
+		send(JSON.stringify({
+			action: "mark_delivered",
+			payload: { chat_uuid: chatUuid },
 		}));
 	}
 
@@ -266,7 +282,40 @@ export const useMessengerStore = defineStore("messenger", () => {
 		const list = messages.value.get(msg.chat_uuid);
 		if (!list) return;
 		const idx = list.findIndex((m) => m.uuid === msg.uuid);
-		if (idx !== -1) list.splice(idx, 1, msg);
+		if (idx !== -1) {
+			list.splice(idx, 1, msg);
+			messages.value.set(msg.chat_uuid, [...list]);
+		}
+	}
+
+	function _updateUserStatus(userUuid: string, isOnline: boolean, lastSeenAt: string) {
+		// 1. Обновляем в списке чатов (если это прямой чат с этим пользователем)
+		chats.value.forEach((chat) => {
+			if (chat.sender && chat.sender.uuid === userUuid) {
+				chat.sender.is_online = isOnline;
+				chat.sender.last_seen_at = lastSeenAt;
+			}
+		});
+
+		// 2. Обновляем в списках участников (если кешированы)
+		members.value.forEach((memberList) => {
+			memberList.forEach((member) => {
+				if (member.user_uuid === userUuid) {
+					member.is_online = isOnline;
+					member.last_seen_at = lastSeenAt;
+				}
+			});
+		});
+
+		// 3. Обновляем в сообщениях (опционально, так как там sender может быть закеширован)
+		messages.value.forEach((msgList) => {
+			msgList.forEach((msg) => {
+				if (msg.sender && msg.sender.uuid === userUuid) {
+					msg.sender.is_online = isOnline;
+					msg.sender.last_seen_at = lastSeenAt;
+				}
+			});
+		});
 	}
 
 	function _removeMessage(chatUuid: string, msgUuid: string) {
@@ -298,8 +347,20 @@ export const useMessengerStore = defineStore("messenger", () => {
 		});
 	}
 
-	// ─── Initialise ───────────────────────────────────────────────────
-	fetchChats();
+	function logout() {
+		close(); // Close WebSocket
+		tokenStore.clear();
+
+		// Reset state
+		currentUserId.value = "";
+		chats.value = [];
+		messages.value.clear();
+		members.value.clear();
+		activeChatId.value = null;
+		typingMap.value.clear();
+
+		router.push("/login");
+	}
 
 	return {
 		// state
@@ -310,13 +371,14 @@ export const useMessengerStore = defineStore("messenger", () => {
 		messagesLoading,
 		members,
 		activeChatId,
-		wsStatus: status, // Экспортируем статус сокета для UI (например, показать иконку подключения)
+		wsStatus: status,
 		// computed
 		activeChat,
 		activeMessages,
 		typingUsersFor,
 		memberName,
 		// methods
+		initWs,
 		fetchChats,
 		fetchMessages,
 		selectChat,
@@ -324,5 +386,8 @@ export const useMessengerStore = defineStore("messenger", () => {
 		editMessage,
 		deleteMessage,
 		sendTyping,
+		markRead,
+		markDelivered,
+		logout,
 	};
 });

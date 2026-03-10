@@ -6,9 +6,6 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
-  const targetUrl =
-    env.VITE_BASE_URL?.replace(/\/$/, "") || "http://localhost:8000";
-
   return {
     plugins: [vue(), tailwindcss()],
 
@@ -21,12 +18,12 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/api': {
-          target: 'http://localhost:8000',
+          target: env.VITE_BASE_REST_URL,
           changeOrigin: true,
         },
 
         '/ws': {
-          target: 'ws://localhost:8000',
+          target: env.VITE_BASE_WS_URL,
           ws: true,
           changeOrigin: true,
         },

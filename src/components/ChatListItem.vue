@@ -13,12 +13,12 @@
     />
 
     <!-- Avatar -->
-    <ChatAvatar :chat="chat.sender" :size="42" />
+    <ChatAvatar :chat="chat.sender" :size="42" :show-status="chat.chat_type === 'direct'" />
 
     <div class="flex-1 min-w-0 text-left">
       <div class="flex items-center justify-between gap-2">
         <span class="text-sm font-semibold truncate" :class="active ? 'text-text-bright' : 'text-text-base'">
-          {{ chat.sender.first_name ?? 'Chat' }} {{ chat.sender?.second_name }}
+          {{ chat.sender?.first_name || 'Chat' }} {{ chat.sender?.second_name || '' }}
         </span>
         <span class="text-xs font-mono shrink-0" :class="active ? 'text-text-dim' : 'text-muted'">
           {{ timeLabel }}

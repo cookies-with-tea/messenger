@@ -19,5 +19,9 @@ import EmptyState  from '@/components/EmptyState.vue'
 
 const store = useMessengerStore()
 
-onMounted(() => store.fetchChats())
+onMounted(() => {
+  // Открываем глобальный WS-канал если ещё не открыт (например, после refresh страницы)
+  store.initWs()
+  store.fetchChats()
+})
 </script>
