@@ -1,14 +1,11 @@
 // src/messenger/ws_echo.rs
 use axum::{
-    extract::{
-        ws::{Message, Utf8Bytes, WebSocket, WebSocketUpgrade},
-        State,
-    },
+    extract::ws::{Message, Utf8Bytes, WebSocket, WebSocketUpgrade},
     response::IntoResponse,
     routing::get,
     Router,
 };
-use futures::{SinkExt, StreamExt};
+use futures::SinkExt;
 use std::sync::Arc;
 use crate::AppState;
 

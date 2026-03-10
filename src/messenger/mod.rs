@@ -76,5 +76,4 @@ pub mod handlers;
 pub mod ws;
 pub mod ws_echo;
 
-pub use handlers::{router, ws_router};
 pub use ws::WsState;

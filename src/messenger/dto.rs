@@ -157,6 +157,8 @@ pub struct MessageRow {
     // Превью цитаты
     #[sqlx(default)]
     pub reply_body_preview: Option<String>,
+
+    pub media_uuid: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow, ToSchema, Clone)]
@@ -216,12 +218,15 @@ pub struct MessageResponseDTO {
   // превью цитируемого
   #[sqlx(default)]
   pub reply_body_preview: Option<String>,
+
+  pub media: Option<MediaDTO>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateMessageDTO {
     pub body: String,
     pub reply_to_uuid: Option<Uuid>,
+    pub media_uuid: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -271,7 +276,7 @@ pub enum WsServerEvent {
 #[serde(tag = "action", content = "payload", rename_all = "snake_case")]
 pub enum WsClientAction {
     /// Отправить сообщение (глобальный WS — нужен chat_uuid)
-    SendMessage { chat_uuid: Uuid, body: String, reply_to_uuid: Option<Uuid> },
+    SendMessage { chat_uuid: Uuid, body: String, reply_to_uuid: Option<Uuid>, media_uuid: Option<Uuid> },
     /// Редактировать сообщение
     EditMessage  { chat_uuid: Uuid, uuid: Uuid, body: String },
     /// Удалить сообщение

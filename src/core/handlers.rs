@@ -10,7 +10,7 @@ pub async fn get_media(
   entity_uuid: &Uuid,
 ) -> Result<Option<MediaDTO>, sqlx::Error> {
   let query = format!(
-    "SELECT m.url, m.alt, m.title
+    "SELECT m.url, m.alt, m.title, m.media_type::text as media_type
          FROM {} em
          JOIN media m ON em.media_uuid = m.uuid
          WHERE em.{} = $1
@@ -26,6 +26,7 @@ pub async fn get_media(
       url: row.get("url"),
       alt: row.get("alt"),
       title: row.get("title"),
+      media_type: row.try_get("media_type").ok(),
     });
 
   Ok(row)
@@ -36,12 +37,9 @@ pub async fn get_media_by_uuid(
   state: &Arc<AppState>,
   media_uuid: Option<Uuid>
 ) -> Result<Option<MediaDTO>, sqlx::Error> {
-  // Если UUID не передан (None), сразу возвращаем None
   if let Some(uuid) = media_uuid {
-    // Запрос для получения медиа-данных по UUID
-    let query = "SELECT url, alt, title FROM media WHERE uuid = $1 LIMIT 1";
+    let query = "SELECT url, alt, title, media_type::text as media_type FROM media WHERE uuid = $1 LIMIT 1";
 
-    // Выполнение запроса
     let row = sqlx::query(query)
       .bind(uuid)
       .fetch_optional(&state.pool)
@@ -50,11 +48,11 @@ pub async fn get_media_by_uuid(
         url: row.get("url"),
         alt: row.get("alt"),
         title: row.get("title"),
+        media_type: row.try_get("media_type").ok(),
       });
 
     Ok(row)
   } else {
-    // Если UUID отсутствует, возвращаем None
     Ok(None)
   }
 }
@@ -68,7 +66,7 @@ pub async fn get_media_by_uuids(
     }
 
     let rows = sqlx::query(
-        "SELECT uuid, url, alt, title FROM media WHERE uuid = ANY($1)"
+        "SELECT uuid, url, alt, title, media_type::text as media_type FROM media WHERE uuid = ANY($1)"
     )
     .bind(&uuids)
     .fetch_all(pool)
@@ -81,6 +79,7 @@ pub async fn get_media_by_uuids(
             url: row.get("url"),
             alt: row.get("alt"),
             title: row.get("title"),
+            media_type: row.try_get("media_type").ok(),
         });
     }
 

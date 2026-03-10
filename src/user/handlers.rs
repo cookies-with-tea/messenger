@@ -1,6 +1,8 @@
-use crate::core::dto::{ApiPaginationDTO, ApiResponse, ApiResponseWithPagination, PaginationDTO, PaginationQuery};
+use crate::core::dto::{ApiPaginationDTO, ApiResponse, ApiResponseWithPagination, PaginationDTO};
 use crate::core::response::{error_map, into_api_response, into_api_response_with_pagination};
-use crate::user::dto::{CreateUserDTO, UpdateUserDTO, User, UserResponseDTO, UserRole, UserSearchQuery, UserStatus};
+use crate::user::dto::{
+    CreateUserDTO, UpdateUserDTO, User, UserResponseDTO, UserRole, UserSearchQuery, UserStatus,
+};
 use crate::user::utils::{validate_email, validate_phone};
 use crate::AppState;
 use argon2::{
@@ -11,7 +13,7 @@ use axum::Router;
 use axum::{
     extract::{Extension, Path, Query, State},
     http::StatusCode,
-    routing::{get, patch, post},
+    routing::get,
     Json,
 };
 use sqlx::query_as;
@@ -179,7 +181,7 @@ async fn create(
             into_api_response(StatusCode::CREATED, None, None, Some(vec![msg]))
         }
         Err(_e) => {
-          println!("{:?}", _e);
+            println!("{:?}", _e);
             let msg = state.i18n.t("general.db_error", &locale).await;
             into_api_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -217,7 +219,8 @@ async fn get_all(
     let limit = query.limit.unwrap_or(10);
     let offset = (page - 1) * limit;
 
-    let search_pattern = query.search
+    let search_pattern = query
+        .search
         .as_deref()
         .filter(|s| !s.is_empty())
         .map(|s| format!("%{}%", s));
@@ -230,7 +233,7 @@ async fn get_all(
                     OR phone ILIKE $1
                     OR first_name ILIKE $1
                     OR second_name ILIKE $1
-                    OR last_name ILIKE $1"
+                    OR last_name ILIKE $1",
             )
             .bind(pattern)
             .fetch_one(&state.pool)
@@ -273,7 +276,7 @@ async fn get_all(
                     OR second_name ILIKE $1
                     OR last_name ILIKE $1
                  ORDER BY created_at
-                 LIMIT $2 OFFSET $3"
+                 LIMIT $2 OFFSET $3",
             )
             .bind(pattern)
             .bind(limit)
@@ -290,7 +293,7 @@ async fn get_all(
                     created_at, updated_at
                  FROM guest_user
                  ORDER BY created_at
-                 LIMIT $1 OFFSET $2"
+                 LIMIT $1 OFFSET $2",
             )
             .bind(limit)
             .bind(offset)
@@ -359,25 +362,25 @@ async fn get_one(
 
     match result {
         Ok(Some(user)) => {
-          let user_response = UserResponseDTO {
-              uuid: user.uuid,
-              first_name: user.first_name,
-              second_name: user.second_name,
-              last_name: user.last_name,
-              phone: user.phone,
-              email: user.email,
-              avatar: user.avatar,
-              role: user.role,
-              birth_date: user.birth_date,
-              created_at: user.created_at,
-              updated_at: user.updated_at,
-              street: user.street,
-              city: user.city,
-              status: user.status,
-              gender: user.gender,
-          };
+            let user_response = UserResponseDTO {
+                uuid: user.uuid,
+                first_name: user.first_name,
+                second_name: user.second_name,
+                last_name: user.last_name,
+                phone: user.phone,
+                email: user.email,
+                avatar: user.avatar,
+                role: user.role,
+                birth_date: user.birth_date,
+                created_at: user.created_at,
+                updated_at: user.updated_at,
+                street: user.street,
+                city: user.city,
+                status: user.status,
+                gender: user.gender,
+            };
 
-          into_api_response(StatusCode::OK, Some(user_response), None, None)
+            into_api_response(StatusCode::OK, Some(user_response), None, None)
         }
         Ok(None) => {
             let msg = state.i18n.t("user.not_found", &locale).await;
@@ -495,62 +498,62 @@ async fn update(
             let mut update_query = "UPDATE guest_user SET ".to_string();
             let mut query_param_index = 1;
 
-            if let Some(email) = &payload.email {
+            if let Some(_email) = &payload.email {
                 update_query.push_str(&format!("email = ${}, ", query_param_index));
                 query_param_index += 1;
             }
 
-            if let Some(phone) = &payload.phone {
+            if let Some(_phone) = &payload.phone {
                 update_query.push_str(&format!("phone = ${}, ", query_param_index));
                 query_param_index += 1;
             }
 
-            if let Some(first_name) = &payload.first_name {
+            if let Some(_first_name) = &payload.first_name {
                 update_query.push_str(&format!("first_name = ${}, ", query_param_index));
                 query_param_index += 1;
             }
 
-            if let Some(second_name) = &payload.second_name {
+            if let Some(_second_name) = &payload.second_name {
                 update_query.push_str(&format!("second_name = ${}, ", query_param_index));
                 query_param_index += 1;
             }
 
-            if let Some(last_name) = &payload.last_name {
+            if let Some(_last_name) = &payload.last_name {
                 update_query.push_str(&format!("last_name = ${}, ", query_param_index));
                 query_param_index += 1;
             }
 
-            if let Some(birth_date) = &payload.birth_date {
+            if let Some(_birth_date) = &payload.birth_date {
                 update_query.push_str(&format!("birth_date = ${}, ", query_param_index));
                 query_param_index += 1;
             }
 
-            if let Some(role) = &payload.role {
+            if let Some(_role) = &payload.role {
                 update_query.push_str(&format!("role = ${}, ", query_param_index));
                 query_param_index += 1;
             }
 
-            if let Some(status) = &payload.status {
+            if let Some(_status) = &payload.status {
                 update_query.push_str(&format!("status = ${}, ", query_param_index));
                 query_param_index += 1;
             }
 
-            if let Some(avatar) = &payload.avatar {
+            if let Some(_avatar) = &payload.avatar {
                 update_query.push_str(&format!("avatar = ${}, ", query_param_index));
                 query_param_index += 1;
             }
 
-            if let Some(street) = &payload.street {
+            if let Some(_street) = &payload.street {
                 update_query.push_str(&format!("street = ${}, ", query_param_index));
                 query_param_index += 1;
             }
 
-            if let Some(gender) = &payload.gender {
+            if let Some(_gender) = &payload.gender {
                 update_query.push_str(&format!("gender = ${}, ", query_param_index));
                 query_param_index += 1;
             }
 
-            if let Some(city) = &payload.city {
+            if let Some(_city) = &payload.city {
                 update_query.push_str(&format!("city = ${}, ", query_param_index));
                 query_param_index += 1;
             }
@@ -565,69 +568,72 @@ async fn update(
                 );
             }
 
-            update_query.push_str(&format!("updated_at = NOW() WHERE uuid = ${}", query_param_index));
+            update_query.push_str(&format!(
+                "updated_at = NOW() WHERE uuid = ${}",
+                query_param_index
+            ));
 
             let mut query = sqlx::query(&update_query);
 
-            let mut bind_param_index = 1;
+            let mut _bind_param_index = 1;
             if let Some(email) = &payload.email {
                 query = query.bind(email.clone());
-                bind_param_index += 1;
+                _bind_param_index += 1;
             }
 
             if let Some(phone) = &payload.phone {
                 query = query.bind(phone.clone());
-                bind_param_index += 1;
+                _bind_param_index += 1;
             }
 
             if let Some(first_name) = &payload.first_name {
                 query = query.bind(first_name.clone());
-                bind_param_index += 1;
+                _bind_param_index += 1;
             }
 
             if let Some(second_name) = &payload.second_name {
                 query = query.bind(second_name.clone());
-                bind_param_index += 1;
+                _bind_param_index += 1;
             }
 
             if let Some(last_name) = &payload.last_name {
                 query = query.bind(last_name.clone());
-                bind_param_index += 1;
+                _bind_param_index += 1;
             }
 
             if let Some(birth_date) = &payload.birth_date {
                 query = query.bind(*birth_date);
-                bind_param_index += 1;
+                _bind_param_index += 1;
             }
 
             if let Some(role) = &payload.role {
                 query = query.bind(role);
-                bind_param_index += 1;
+                _bind_param_index += 1;
             }
 
             if let Some(status) = &payload.status {
                 query = query.bind(status);
-                bind_param_index += 1;
+                _bind_param_index += 1;
             }
 
             if let Some(avatar) = &payload.avatar {
                 query = query.bind(avatar.clone());
-                bind_param_index += 1;
+                _bind_param_index += 1;
             }
 
             if let Some(street) = &payload.street {
                 query = query.bind(street.clone());
-                bind_param_index += 1;
+                _bind_param_index += 1;
             }
 
             if let Some(gender) = &payload.gender {
                 query = query.bind(gender.clone());
-                bind_param_index += 1;
+                _bind_param_index += 1;
             }
 
             if let Some(city) = &payload.city {
                 query = query.bind(city.clone());
-                bind_param_index += 1;
+                _bind_param_index += 1;
             }
 
             query = query.bind(uuid);
@@ -636,10 +642,11 @@ async fn update(
 
             match result {
                 Ok(_) => {
-                    let updated_user = sqlx::query_as::<_, User>("SELECT * FROM guest_user WHERE uuid = $1")
-                        .bind(uuid)
-                        .fetch_one(&state.pool)
-                        .await;
+                    let updated_user =
+                        sqlx::query_as::<_, User>("SELECT * FROM guest_user WHERE uuid = $1")
+                            .bind(uuid)
+                            .fetch_one(&state.pool)
+                            .await;
 
                     match updated_user {
                         Ok(user) => {
@@ -662,7 +669,12 @@ async fn update(
                             };
 
                             let msg = state.i18n.t("user.updated", &locale).await;
-                            into_api_response(StatusCode::OK, Some(user_response), None, Some(vec![msg]))
+                            into_api_response(
+                                StatusCode::OK,
+                                Some(user_response),
+                                None,
+                                Some(vec![msg]),
+                            )
                         }
                         Err(_) => {
                             let msg = state.i18n.t("general.db_error", &locale).await;
@@ -709,7 +721,9 @@ async fn update(
 
 // TODO: Add protected routes
 pub fn public_router() -> Router<Arc<AppState>> {
-    Router::new().route("/", get(get_all).post(create)).route("/{id}", get(get_one).delete(delete_one).patch(update))
+    Router::new()
+        .route("/", get(get_all).post(create))
+        .route("/{id}", get(get_one).delete(delete_one).patch(update))
 }
 
 pub fn protected_router() -> Router<Arc<AppState>> {

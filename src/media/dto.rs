@@ -45,5 +45,6 @@ pub struct MediaItemFromDb {
 pub enum MediaType {
   Image,
   Video,
+  Audio,
   Icon,
 }

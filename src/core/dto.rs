@@ -50,6 +50,7 @@ pub struct MediaDTO {
     pub(crate) url: String,
     pub(crate) alt: Option<String>,
     pub(crate) title: Option<String>,
+    pub(crate) media_type: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, FromRow)]

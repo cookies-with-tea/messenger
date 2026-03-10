@@ -1,5 +1,5 @@
 use std::{collections::HashMap, sync::Arc};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 
 use axum::{
     Extension, Json, Router,
@@ -88,6 +88,12 @@ async fn map_message_row(
         .ok()
         .flatten();
 
+    // Загружаем медиа сообщения
+    let media = get_media_by_uuid(state, row.media_uuid)
+        .await
+        .ok()
+        .flatten();
+
     // Фильтруем пустые строки
     let first_name = row.sender_first_name.filter(|s| !s.is_empty());
     let second_name = row.sender_second_name.filter(|s| !s.is_empty());
@@ -117,6 +123,7 @@ async fn map_message_row(
         read_count: row.read_count,
         my_status: row.my_status,
         reply_body_preview: row.reply_body_preview,
+        media,
     }
 }
 
@@ -278,7 +285,7 @@ pub async fn get_chats(
 
     let rows = match rows {
         Ok(r) => r,
-        Err(e) => {
+        Err(_e) => {
             let msg = state.i18n.t("general.db_error", &locale).await;
             return into_api_response_with_pagination(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -841,7 +848,8 @@ const MSG_SELECT: &str = r#"
             WHERE ms2.message_uuid = m.uuid AND ms2.status = 'read') AS read_count,
         (SELECT status FROM message_status ms3
             WHERE ms3.message_uuid = m.uuid AND ms3.user_uuid = $2 LIMIT 1) AS my_status,
-        (SELECT body FROM message m2 WHERE m2.uuid = m.reply_to_uuid LIMIT 1) AS reply_body_preview
+        (SELECT body FROM message m2 WHERE m2.uuid = m.reply_to_uuid LIMIT 1) AS reply_body_preview,
+        m.media_uuid
     FROM message m
     LEFT JOIN guest_user gu ON gu.uuid = m.sender_uuid
 "#;
@@ -948,6 +956,12 @@ pub async fn get_messages(
         let first_name = row.sender_first_name.filter(|s| !s.is_empty());
         let second_name = row.sender_second_name.filter(|s| !s.is_empty());
 
+        // Загружаем медиа сообщения
+        let media = get_media_by_uuid(&state, row.media_uuid)
+            .await
+            .ok()
+            .flatten();
+
         items.push(MessageResponseDTO {
             uuid: row.uuid,
             chat_uuid: row.chat_uuid,
@@ -973,6 +987,7 @@ pub async fn get_messages(
             read_count: row.read_count,
             my_status: row.my_status,
             reply_body_preview: row.reply_body_preview,
+            media,
         });
     }
 
@@ -1023,8 +1038,8 @@ pub async fn send_message(
     // 👇 Загружаем как MessageRow (плоская структура с #[derive(FromRow)])
     let row = sqlx::query_as::<_, MessageRow>(
         r#"WITH ins AS (
-            INSERT INTO message (chat_uuid, sender_uuid, reply_to_uuid, body)
-            VALUES ($1, $2, $3, $4) RETURNING *
+            INSERT INTO message (chat_uuid, sender_uuid, reply_to_uuid, body, media_uuid)
+            VALUES ($1, $2, $3, $4, $5) RETURNING *
         )
         SELECT
             m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid,
@@ -1035,7 +1050,8 @@ pub async fn send_message(
             0::bigint      AS delivered_count,
             0::bigint      AS read_count,
             NULL::delivery_status AS my_status,
-            reply.body     AS reply_body_preview
+            reply.body     AS reply_body_preview,
+            m.media_uuid
         FROM ins m
         JOIN guest_user gu ON gu.uuid = m.sender_uuid
         LEFT JOIN message reply ON reply.uuid = m.reply_to_uuid"#
@@ -1044,6 +1060,7 @@ pub async fn send_message(
     .bind(me)
     .bind(body.reply_to_uuid)
     .bind(&body.body)
+    .bind(body.media_uuid)
     .fetch_one(&state.pool)
     .await;
 
@@ -1096,7 +1113,8 @@ pub async fn edit_message(
             (SELECT COUNT(*) FROM message_status ms WHERE ms.message_uuid = m.uuid AND ms.status = 'delivered') AS delivered_count,
             (SELECT COUNT(*) FROM message_status ms WHERE ms.message_uuid = m.uuid AND ms.status = 'read')      AS read_count,
             NULL::delivery_status AS my_status,
-            NULL::text            AS reply_body_preview
+            NULL::text            AS reply_body_preview,
+            m.media_uuid
         FROM upd m
         JOIN guest_user gu ON gu.uuid = m.sender_uuid"#,
     )
@@ -1282,7 +1300,7 @@ pub async fn ws_upgrade(
       let state_inner = state.clone();
       let pool_inner = pool.clone();
 
-        handle_socket(socket, chat_uuid, user_uuid, ws_state, move |chat_uuid, user_uuid, raw| {
+        handle_socket(socket, chat_uuid, user_uuid, ws_state, move |_chat_uuid, user_uuid, raw| {
             let state_async = state_inner.clone();
             let pool_async = pool_inner.clone();
 
@@ -1299,11 +1317,11 @@ pub async fn ws_upgrade(
 
                 match action {
                     // ── Отправить сообщение ──────────────────────────────────
-                    WsClientAction::SendMessage { body, reply_to_uuid, chat_uuid: msg_chat_uuid } => {
+                    WsClientAction::SendMessage { body, reply_to_uuid, chat_uuid: msg_chat_uuid, media_uuid } => {
                         let row = sqlx::query_as::<_, MessageRow>(
                             r#"WITH ins AS (
-                                INSERT INTO message (chat_uuid, sender_uuid, reply_to_uuid, body)
-                                VALUES ($1, $2, $3, $4) RETURNING *
+                                INSERT INTO message (chat_uuid, sender_uuid, reply_to_uuid, body, media_uuid)
+                                VALUES ($1, $2, $3, $4, $5) RETURNING *
                             )
                             SELECT
                                 m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid,
@@ -1314,7 +1332,8 @@ pub async fn ws_upgrade(
                                 0::bigint      AS delivered_count,
                                 0::bigint      AS read_count,
                                 NULL::delivery_status AS my_status,
-                                reply.body     AS reply_body_preview
+                                reply.body     AS reply_body_preview,
+                                m.media_uuid
                             FROM ins m
                             JOIN guest_user gu ON gu.uuid = m.sender_uuid
                             LEFT JOIN message reply ON reply.uuid = m.reply_to_uuid"#,
@@ -1323,6 +1342,7 @@ pub async fn ws_upgrade(
                         .bind(user_uuid)
                         .bind(reply_to_uuid)
                         .bind(&body)
+                        .bind(media_uuid)
                         .fetch_one(&pool)
                         .await
                         .ok()?;
@@ -1356,7 +1376,8 @@ pub async fn ws_upgrade(
                                 0::bigint      AS delivered_count,
                                 0::bigint      AS read_count,
                                 NULL::delivery_status AS my_status,
-                                NULL::text     AS reply_body_preview
+                                NULL::text     AS reply_body_preview,
+                                m.media_uuid
                             FROM upd m JOIN guest_user gu ON gu.uuid = m.sender_uuid"#,
                         )
                         .bind(&body)
@@ -1532,7 +1553,7 @@ pub async fn ws_user_upgrade(
 
                     match action {
                         // ── Отправить сообщение ──────────────────────────────────
-                        WsClientAction::SendMessage { chat_uuid, body, reply_to_uuid } => {
+                        WsClientAction::SendMessage { chat_uuid, body, reply_to_uuid, media_uuid } => {
                             if !assert_member(pool, chat_uuid, user_uuid).await {
                                 let _ = user_ws.send_to_user(user_uuid, WsServerEvent::Error { 
                                     message: "You are not a member of this chat".into() 
@@ -1542,8 +1563,8 @@ pub async fn ws_user_upgrade(
 
                             let row = sqlx::query_as::<_, MessageRow>(
                                 r#"WITH ins AS (
-                                    INSERT INTO message (chat_uuid, sender_uuid, reply_to_uuid, body)
-                                    VALUES ($1, $2, $3, $4) RETURNING *
+                                    INSERT INTO message (chat_uuid, sender_uuid, reply_to_uuid, body, media_uuid)
+                                    VALUES ($1, $2, $3, $4, $5) RETURNING *
                                 )
                                 SELECT
                                     m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid,
@@ -1555,7 +1576,8 @@ pub async fn ws_user_upgrade(
                                     0::bigint      AS delivered_count,
                                     0::bigint      AS read_count,
                                     NULL::delivery_status AS my_status,
-                                    reply.body     AS reply_body_preview
+                                    reply.body     AS reply_body_preview,
+                                    m.media_uuid
                                 FROM ins m
                                 JOIN guest_user gu ON gu.uuid = m.sender_uuid
                                 LEFT JOIN message reply ON reply.uuid = m.reply_to_uuid"#,
@@ -1564,6 +1586,7 @@ pub async fn ws_user_upgrade(
                             .bind(user_uuid)
                             .bind(reply_to_uuid)
                             .bind(&body)
+                            .bind(media_uuid)
                             .fetch_one(pool)
                             .await;
 
@@ -1574,7 +1597,7 @@ pub async fn ws_user_upgrade(
                                     let members = get_chat_member_uuids(pool, chat_uuid).await;
                                     user_ws.broadcast_to_users(&members, event).await;
                                 }
-                                Err(e) => {
+                                Err(_e) => {
                                     let _ = user_ws.send_to_user(user_uuid, WsServerEvent::Error { 
                                         message: "Database error while sending message".into() 
                                     }).await;
@@ -1602,7 +1625,8 @@ pub async fn ws_user_upgrade(
                                     0::bigint      AS delivered_count,
                                     0::bigint      AS read_count,
                                     NULL::delivery_status AS my_status,
-                                    NULL::text     AS reply_body_preview
+                                    NULL::text     AS reply_body_preview,
+                                    m.media_uuid
                                 FROM upd m JOIN guest_user gu ON gu.uuid = m.sender_uuid"#,
                             )
                             .bind(&body)

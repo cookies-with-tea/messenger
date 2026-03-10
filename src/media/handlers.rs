@@ -43,14 +43,14 @@ pub async fn create(
 
     while let Some(field) = multipart.next_field().await.unwrap() {
         if field.name() == Some("file") {
+            let ct_from_field = field.content_type().map(|s| s.to_string());
             file_name = field
                 .file_name()
                 .map(|f| f.to_string())
                 .unwrap_or_else(|| "file".to_string());
             data = field.bytes().await.unwrap().to_vec();
-            content_type = mime_guess::from_path(&file_name)
-                .first()
-                .map(|mime| mime.to_string());
+            content_type = ct_from_field
+                .or_else(|| mime_guess::from_path(&file_name).first().map(|m| m.to_string()));
         } else if field.name() == Some("title") {
             title = Some(field.text().await.unwrap());
         } else if field.name() == Some("alt") {
@@ -74,12 +74,14 @@ pub async fn create(
         "image"
     } else if content_type.starts_with("video/") {
         "video"
+    } else if content_type.starts_with("audio/") {
+        "audio"
     } else {
         return into_api_response(
             StatusCode::BAD_REQUEST,
             None,
             Some(error_map("content_type", "Unsupported media type")),
-            Some(vec!["Only images and videos are allowed".to_string()]),
+            Some(vec!["Only images, videos and audio are allowed".to_string()]),
         );
     };
 
