@@ -60,6 +60,29 @@
         </svg>
       </button>
 
+      <!-- GIF button -->
+      <button
+        @click="openPicker('gif')"
+        class="shrink-0 p-2.5 rounded-xl text-text-dim hover:text-ember hover:bg-ember/10 border border-transparent hover:border-ember/20 transition-all group"
+        title="GIFs"
+      >
+        <span class="text-[10px] font-black group-hover:scale-110 transition-transform">GIF</span>
+      </button>
+
+      <!-- Sticker button -->
+      <button
+        @click="openPicker('sticker')"
+        class="shrink-0 p-2.5 rounded-xl text-text-dim hover:text-ember hover:bg-ember/10 border border-transparent hover:border-ember/20 transition-all group"
+        title="Stickers"
+      >
+        <span class="text-lg leading-none group-hover:scale-110 transition-transform">✨</span>
+      </button>
+
+      <!-- GIF/Sticker picker -->
+      <div v-if="showGif" class="absolute bottom-24 left-6 z-30">
+        <GifPicker :initial-mode="pickerMode" @select="handleGifSelect" @close="showGif = false" />
+      </div>
+
       <!-- Emoji picker -->
       <Transition name="emoji-pop">
         <div
@@ -120,6 +143,7 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import { useMessengerStore } from '@/stores/messengerStore'
 import VoiceRecorder from './VoiceRecorder.vue'
+import GifPicker from './GifPicker.vue'
 
 const store = useMessengerStore()
 
@@ -133,6 +157,8 @@ const emit = defineEmits<{
 
 const text = ref('')
 const showEmoji = ref(false)
+const showGif = ref(false)
+const pickerMode = ref<'gif' | 'sticker'>('gif')
 const inputRef = ref<HTMLTextAreaElement>()
 const fileInput = ref<HTMLInputElement>()
 
@@ -222,6 +248,20 @@ function handleFileChange(e: Event) {
     store.sendFileMessage(files[0])
     if (fileInput.value) fileInput.value.value = ''
   }
+}
+
+function openPicker(mode: 'gif' | 'sticker') {
+  if (showGif.value && pickerMode.value === mode) {
+    showGif.value = false
+  } else {
+    pickerMode.value = mode
+    showGif.value = true
+  }
+}
+
+function handleGifSelect(md: string) {
+  emit('send', md)
+  showGif.value = false
 }
 </script>
 

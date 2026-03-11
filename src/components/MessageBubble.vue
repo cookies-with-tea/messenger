@@ -1,11 +1,30 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import snarkdown from 'snarkdown'
+import MarkdownIt from 'markdown-it'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/github-dark.css' // Or any other style
 import { useMessengerStore } from '@/stores/messengerStore'
 import type { MessageResponseDTO } from '@/types'
 import ChatAvatar from './ChatAvatar.vue'
 import VoiceMessage from './VoiceMessage.vue'
 import ContextMenu from './ui/ContextMenu.vue'
+
+const md: MarkdownIt = new MarkdownIt({
+  html: false,
+  linkify: true,
+  typographer: true
+})
+
+md.options.highlight = (str: string, lang: string): string => {
+  if (lang && hljs.getLanguage(lang)) {
+    try {
+      return '<pre><code class="hljs">' +
+        hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
+        '</code></pre>';
+    } catch (__) { }
+  }
+  return '<pre><code class="hljs">' + md.utils.escapeHtml(str) + '</code></pre>';
+}
 
 const COLOR_PALETTE = ['#4f7cff','#00e5ff','#52e07c','#ff6b35','#c084fc','#fb923c','#38bdf8','#f472b6']
 
@@ -79,7 +98,7 @@ const senderColor = computed(() => {
 const senderDisplayName = computed(() => {
   const s = props.message.sender
   if (!s) return props.message.sender_uuid?.split('-')[0] || 'Unknown'
-  return `${s.first_name || ''} ${s.second_name || ''}`.trim() || props.message.sender_uuid?.split('-')[0]
+  return `${s?.first_name || ''} ${s?.second_name || ''}`.trim() || props.message.sender_uuid?.split('-')[0]
 })
 
 const bubbleClass = computed(() =>
@@ -91,7 +110,7 @@ const textClass = computed(() => isOwn.value ? 'text-white' : 'text-text-bright'
 
 const renderedBody = computed(() => {
   if (props.message.is_deleted) return 'Signal lost'
-  return snarkdown(props.message.body)
+  return md.render(props.message.body)
 })
 
 const reactionsGrouped = computed(() => {
@@ -99,9 +118,14 @@ const reactionsGrouped = computed(() => {
   const groups: Record<string, { count: number, me: boolean }> = {}
   
   rs.forEach(r => {
-    if (!groups[r.emoji]) groups[r.emoji] = { count: 0, me: false }
-    groups[r.emoji].count++
-    if (r.user_uuid === store.currentUserId) groups[r.emoji].me = true
+    if (!groups[r.emoji]) {
+      groups[r.emoji] = { count: 0, me: false }
+    }
+    const group = groups[r.emoji]
+    if (group) {
+      group.count++
+      if (r.user_uuid === store.currentUserId) group.me = true
+    }
   })
   
   return Object.entries(groups).map(([emoji, data]) => ({ emoji, ...data }))
