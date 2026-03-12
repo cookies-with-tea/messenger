@@ -106,6 +106,13 @@ pub struct ChatResponseDTO {
     pub alias: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, ToSchema, Clone)]
+pub struct ChatMediaCountsDTO {
+    pub images: i64,
+    pub videos: i64,
+    pub audio: i64,
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateChatDTO {
     /// Только для group

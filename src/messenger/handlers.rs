@@ -8,7 +8,7 @@ use axum::{
     response::IntoResponse,
     routing,
 };
-use sqlx::{PgPool, query_as};
+use sqlx::{PgPool, query_as, Row};
 use uuid::Uuid;
 
 use crate::{AppState, auth::utils::get_user_from_token, core::{dto::{ApiPaginationDTO, ApiResponse, ApiResponseWithPagination, MediaDTO, PaginationDTO, PaginationQuery}, handlers::{get_media_by_uuid, get_media_by_uuids}, response::{error_map, into_api_response, into_api_response_with_pagination}}, messenger::dto::{ChatRow, MessageRow, UserPreviewDTO, WsQuery}};
@@ -17,6 +17,7 @@ use super::{
     dto::{
         AddMemberDTO, ChatMemberDTO, ChatResponseDTO, ChatType, CreateChatDTO, CreateMessageDTO,
         DeliveryStatus, MessageQuery, MessageResponseDTO, UpdateMessageDTO, SetAliasDTO,
+        ChatMediaCountsDTO,
         WsClientAction, WsServerEvent,
     },
     ws::{WsState, handle_socket, handle_user_socket},
@@ -1917,6 +1918,125 @@ pub async fn set_chat_alias(
     }
 }
 
+/// Получить количество вложений по типам
+#[utoipa::path(
+    get,
+    path = "/{chat_uuid}/media/counts",
+    params(("chat_uuid" = Uuid, Path, description = "Chat UUID")),
+    responses(
+        (status = 200, body = ApiResponse<ChatMediaCountsDTO>),
+    ),
+    tag = "Messenger",
+    security(("bearer_auth" = [])),
+    operation_id = "get_chat_media_counts",
+)]
+pub async fn get_chat_media_counts(
+    State(state): State<Arc<AppState>>,
+    Extension(me): Extension<Uuid>,
+    Path(chat_uuid): Path<Uuid>,
+) -> Result<Json<ApiResponse<ChatMediaCountsDTO>>, (StatusCode, Json<ApiResponse<ChatMediaCountsDTO>>)> {
+    if !assert_member(&state.pool, chat_uuid, me).await {
+        return into_api_response(StatusCode::FORBIDDEN, None, None, None);
+    }
+
+    let result = sqlx::query(
+        r#"
+        SELECT 
+            COUNT(CASE WHEN m.media_type = 'image' THEN 1 END) as images,
+            COUNT(CASE WHEN m.media_type = 'video' THEN 1 END) as videos,
+            COUNT(CASE WHEN m.media_type = 'audio' THEN 1 END) as audio
+        FROM message msg
+        JOIN media m ON msg.media_uuid = m.uuid
+        WHERE msg.chat_uuid = $1 AND msg.is_deleted = FALSE
+        "#,
+    )
+    .bind(chat_uuid)
+    .fetch_one(&state.pool)
+    .await;
+
+    let counts = match result {
+        Ok(r) => ChatMediaCountsDTO {
+            images: r.get::<Option<i64>, _>("images").unwrap_or(0),
+            videos: r.get::<Option<i64>, _>("videos").unwrap_or(0),
+            audio: r.get::<Option<i64>, _>("audio").unwrap_or(0),
+        },
+        Err(_) => ChatMediaCountsDTO { images: 0, videos: 0, audio: 0 }
+    };
+
+    into_api_response(StatusCode::OK, Some(counts), None, None)
+}
+
+/// Получить список вложений чата
+#[utoipa::path(
+    get,
+    path = "/{chat_uuid}/media",
+    params(
+        ("chat_uuid" = Uuid, Path, description = "Chat UUID"),
+        ("media_type" = Option<String>, Query, description = "Filter by media type"),
+        ("page" = Option<i64>, Query, description = "Page number"),
+        ("limit" = Option<i64>, Query, description = "Limit"),
+    ),
+    responses(
+        (status = 200, body = ApiResponse<Vec<MessageResponseDTO>>),
+    ),
+    tag = "Messenger",
+    security(("bearer_auth" = [])),
+    operation_id = "get_chat_media",
+)]
+pub async fn get_chat_media(
+    State(state): State<Arc<AppState>>,
+    Extension(me): Extension<Uuid>,
+    Path(chat_uuid): Path<Uuid>,
+    Query(q): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<Vec<MessageResponseDTO>>>, (StatusCode, Json<ApiResponse<Vec<MessageResponseDTO>>>)> {
+    if !assert_member(&state.pool, chat_uuid, me).await {
+        return into_api_response(StatusCode::FORBIDDEN, None, None, None);
+    }
+
+    let limit = q.get("limit").and_then(|s| s.parse::<i64>().ok()).unwrap_or(50);
+    let page = q.get("page").and_then(|s| s.parse::<i64>().ok()).unwrap_or(1);
+    let offset = (page - 1) * limit;
+
+    let mut sql = MSG_SELECT.to_string();
+    sql.push_str(" WHERE m.chat_uuid = $1 AND m.is_deleted = FALSE AND m.media_uuid IS NOT NULL");
+    
+    let rows = if let Some(mt) = q.get("media_type") {
+        sql.push_str(" AND EXISTS (SELECT 1 FROM media med WHERE med.uuid = m.media_uuid AND med.media_type = $3::media_type)");
+        sql.push_str(" ORDER BY m.created_at DESC LIMIT $4 OFFSET $5");
+        sqlx::query_as::<_, MessageRow>(&sql)
+            .bind(chat_uuid)
+            .bind(me)
+            .bind(mt)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&state.pool)
+            .await
+    } else {
+        sql.push_str(" ORDER BY m.created_at DESC LIMIT $3 OFFSET $4");
+        sqlx::query_as::<_, MessageRow>(&sql)
+            .bind(chat_uuid)
+            .bind(me)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&state.pool)
+            .await
+    };
+
+    match rows {
+        Ok(rows) => {
+            let mut items = Vec::with_capacity(rows.len());
+            for row in rows {
+                items.push(map_message_row(&state, row).await);
+            }
+            into_api_response(StatusCode::OK, Some(items), None, None)
+        }
+        Err(e) => {
+            eprintln!("DB error: {:?}", e);
+            into_api_response(StatusCode::INTERNAL_SERVER_ERROR, None, None, None)
+        }
+    }
+}
+
 
 // ════════════════════════════════════════════════════════════════
 // Router
@@ -1938,6 +2058,8 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{chat_uuid}/messages/delivered",  routing::post(mark_delivered))
         .route("/{chat_uuid}/messages/read",       routing::post(mark_read))
         .route("/{chat_uuid}/search",             routing::get(search_messages))
+        .route("/{chat_uuid}/media/counts",       routing::get(get_chat_media_counts))
+        .route("/{chat_uuid}/media",               routing::get(get_chat_media))
 }
 
 pub fn ws_router() -> Router<Arc<AppState>> {

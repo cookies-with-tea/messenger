@@ -5,7 +5,6 @@ use axum::{
     routing::get,
     Router,
 };
-use futures::SinkExt;
 use std::sync::Arc;
 use crate::AppState;
 
