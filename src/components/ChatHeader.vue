@@ -107,6 +107,7 @@ const isDirect = computed(() => props.chat.chat_type === 'direct')
 const chatSender = computed(() => props.chat.sender)
 
 const displayName = computed(() => {
+  if (props.chat.alias) return props.chat.alias
   const sender = props.chat.sender
   return sender ? `${sender.first_name || 'Chat'} ${sender.second_name || ''}`.trim() : (props.chat.name || 'Chat')
 })

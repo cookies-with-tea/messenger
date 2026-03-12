@@ -18,7 +18,7 @@
     <div class="flex-1 min-w-0 text-left">
       <div class="flex items-center justify-between gap-2">
         <span class="text-sm font-semibold truncate" :class="active ? 'text-text-bright' : 'text-text-base'">
-          {{ chat.sender?.first_name || 'Chat' }} {{ chat.sender?.second_name || '' }}
+          {{ displayName }}
         </span>
         <span class="text-xs font-mono shrink-0" :class="active ? 'text-text-dim' : 'text-muted'">
           {{ timeLabel }}
@@ -46,6 +46,12 @@ import ChatAvatar from './ChatAvatar.vue'
 
 const props = defineProps<{ chat: ChatResponseDTO; active: boolean }>()
 const emit  = defineEmits<{ select: [] }>()
+
+const displayName = computed(() => {
+  if (props.chat.alias) return props.chat.alias
+  const sender = props.chat.sender
+  return sender ? `${sender.first_name || 'Chat'} ${sender.second_name || ''}`.trim() : (props.chat.name || 'Chat')
+})
 
 const timeLabel = computed(() => {
   const ts = props.chat.last_message_at

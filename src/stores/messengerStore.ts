@@ -678,5 +678,36 @@ export const useMessengerStore = defineStore("messenger", () => {
 		profileLoading,
 		openProfile,
 		closeProfile,
+		// updates
+		async updateProfile(payload: any) {
+			if (!currentUserId.value) return;
+			try {
+				const res = await userApi.update(currentUserId.value, payload);
+				if (res.data) {
+					currentUserProfile.value = res.data;
+					// Update in selectedProfile if viewing own
+					if (selectedProfileUserId.value === currentUserId.value) {
+						selectedProfile.value = res.data;
+					}
+				}
+				return res;
+			} catch (e) {
+				console.error("[Store] Failed to update profile:", e);
+				throw e;
+			}
+		},
+		async updateContactAlias(chatUuid: string, alias: string | null) {
+			try {
+				await chatApi.setAlias(chatUuid, alias);
+				// Update local state
+				const chat = chats.value.find(c => c.uuid === chatUuid);
+				if (chat) {
+					chat.alias = alias;
+				}
+			} catch (e) {
+				console.error("[Store] Failed to update contact alias:", e);
+				throw e;
+			}
+		}
 	};
 });

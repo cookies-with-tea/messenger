@@ -40,6 +40,15 @@ async function put<T>(path: string, body?: unknown): Promise<T> {
 	return res.json();
 }
 
+async function patch<T>(path: string, body?: unknown): Promise<T> {
+	const res = await fetch(`${BASE}${path}`, {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json", ...authHeaders() },
+		body: body != null ? JSON.stringify(body) : undefined,
+	});
+	return res.json();
+}
+
 async function del<T>(path: string): Promise<T> {
 	const res = await fetch(`${BASE}${path}`, {
 		method: "DELETE",
@@ -60,6 +69,9 @@ export const chatApi = {
 
 	update: (uuid: string, body: { name?: string; description?: string; avatar?: string; is_archived?: boolean }) =>
 		put<ApiResponse<ChatResponseDTO>>(`/api/v1/chats/${uuid}`, body),
+
+	setAlias: (uuid: string, alias: string | null) =>
+		patch<ApiResponse<null>>(`/api/v1/chats/${uuid}/alias`, { alias }),
 
 	leave: (uuid: string) => del<ApiResponse<null>>(`/api/v1/chats/${uuid}`),
 };
@@ -124,6 +136,7 @@ export const userApi = {
 		return get<ApiResponseWithPagination<UserResponseDTO>>(`/api/v1/user?${q}`);
 	},
 	get: (uuid: string) => get<ApiResponse<UserResponseDTO>>(`/api/v1/user/${uuid}`),
+	update: (uuid: string, body: Partial<UserResponseDTO>) => patch<ApiResponse<UserResponseDTO>>(`/api/v1/user/${uuid}`, body),
 };
 
 // ─── Media ────────────────────────────────────────────────────────

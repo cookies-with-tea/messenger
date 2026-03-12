@@ -28,7 +28,14 @@
     <CallModal />
 
     <!-- User Profile Modal Overlay -->
-    <UserProfileModal />
+    <UserProfileModal @open-edit="isEditProfileOpen = true" />
+
+    <!-- Edit Profile Modal Overlay -->
+    <EditProfileModal 
+      :is-open="isEditProfileOpen" 
+      :user="store.currentUserProfile"
+      @close="isEditProfileOpen = false"
+    />
   </div>
 </template>
 
@@ -40,8 +47,11 @@ import ChatWindow  from '@/components/ChatWindow.vue'
 import EmptyState  from '@/components/EmptyState.vue'
 import CallModal from '@/components/CallModal.vue'
 import UserProfileModal from '@/components/UserProfileModal.vue'
+import EditProfileModal from '@/components/EditProfileModal.vue'
+import { ref } from 'vue'
 
 const store = useMessengerStore()
+const isEditProfileOpen = ref(false)
 
 onMounted(() => {
   // Открываем глобальный WS-канал если ещё не открыт (например, после refresh страницы)

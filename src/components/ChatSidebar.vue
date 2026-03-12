@@ -95,7 +95,10 @@ const confirmLogout = () => {
 
     <!-- User Profile & Logout -->
     <div class="p-3 sm:p-4 border-t border-white/5 bg-white/1">
-      <div class="flex items-center gap-2.5 sm:gap-3 p-2 sm:p-2.5 rounded-2xl glass border border-white/10 group hover:border-white/20 transition-all backdrop-blur-xl">
+      <div 
+        @click="messenger.openProfile(messenger.currentUserId)"
+        class="flex items-center gap-2.5 sm:gap-3 p-2 sm:p-2.5 rounded-2xl glass border border-white/10 group hover:border-white/20 transition-all backdrop-blur-xl cursor-pointer"
+      >
         <div class="relative shrink-0">
           <div v-if="messenger.currentUserProfile?.avatar" class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center group-hover:scale-105 transition-transform">
             <img :src="messenger.currentUserProfile.avatar" class="w-full h-full object-cover" :alt="messenger.currentUserProfile.first_name || 'User'" />
@@ -114,7 +117,7 @@ const confirmLogout = () => {
         </div>
 
         <button
-          @click="logoutModalOpen = true"
+          @click.stop="logoutModalOpen = true"
           class="p-2 sm:p-2.5 rounded-xl text-text-dim hover:text-ember hover:bg-ember/10 border border-transparent hover:border-ember/20 transition-all flex items-center justify-center group/btn"
           title="Exit Sector"
         >

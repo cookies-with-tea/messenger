@@ -52,6 +52,7 @@ export interface ChatResponseDTO {
   unread_count: number | null
   member_count: number | null
   sender: UserPreviewDTO | null
+  alias: string | null
 }
 
 export interface ChatMemberDTO {

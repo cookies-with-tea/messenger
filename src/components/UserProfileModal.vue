@@ -22,18 +22,22 @@
       >
         <div
           v-if="store.isProfileModalOpen"
-          class="w-full max-w-sm glass rounded-3xl overflow-hidden border border-white/10 shadow-2xl relative"
+          class="w-full max-w-sm glass rounded-3xl overflow-y-auto border border-white/10 shadow-2xl relative max-h-[85vh] scrollbar-none"
         >
-          <!-- Hero Section -->
-          <div class="h-32 bg-linear-to-br from-ember/30 to-abyss relative">
+          <!-- Sticky Header for Close Button -->
+          <div class="sticky top-0 z-50 p-4 flex justify-end pointer-events-none">
              <button 
                 @click="store.closeProfile"
-                class="absolute top-4 right-4 p-2 rounded-full bg-white/5 text-text-dim hover:text-text-bright hover:bg-white/10 transition-all z-10"
+                class="p-2 rounded-full bg-void/40 backdrop-blur-md text-text-dim hover:text-text-bright hover:bg-void/60 transition-all border border-white/5 pointer-events-auto"
               >
                 <svg class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
                   <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                 </svg>
               </button>
+          </div>
+
+          <!-- Hero Section -->
+          <div class="h-32 bg-linear-to-br from-ember/30 to-abyss relative -mt-16">
           </div>
 
           <!-- Profile Info -->
@@ -60,6 +64,9 @@
                 <h2 class="mt-4 text-2xl font-black font-syne text-text-bright tracking-tight uppercase">
                   {{ displayName }}
                 </h2>
+                <div v-if="hasAlias" class="text-[10px] font-mono text-ember font-bold uppercase tracking-widest -mt-1">
+                  Original: {{ originalName }}
+                </div>
                 <p class="text-xs font-mono text-text-dim uppercase tracking-widest mt-1">
                    {{ statusText }}
                 </p>
@@ -99,6 +106,38 @@
                     <span>Call</span>
                   </button>
                 </div>
+
+                <!-- Edit/Rename Section -->
+                <div class="w-full mt-4 border-t border-white/5 pt-6">
+                  <template v-if="isMe">
+                    <button 
+                      @click="emit('openEdit')"
+                      class="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-white/10 hover:bg-white/15 text-text-bright font-black text-xs uppercase transition-all tracking-widest border border-white/5 shadow-xl"
+                    >
+                      <i class="fas fa-edit mr-2"></i>
+                      <span>Edit My Profile</span>
+                    </button>
+                  </template>
+                  <template v-else-if="directChat">
+                    <div class="flex flex-col gap-2">
+                       <span class="text-[10px] font-mono text-ember font-bold uppercase tracking-widest text-left">Contact Alias</span>
+                       <div class="flex gap-2">
+                          <input 
+                            v-model="newAlias" 
+                            placeholder="Set nickname..." 
+                            class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-text-bright focus:outline-none focus:border-ember transition-all"
+                          />
+                          <button 
+                            @click="saveAlias"
+                            :disabled="savingAlias"
+                            class="px-4 py-2 rounded-xl bg-sage/20 text-sage hover:bg-sage/30 text-xs font-bold uppercase transition-all disabled:opacity-50"
+                          >
+                            {{ savingAlias ? '...' : 'Save' }}
+                          </button>
+                       </div>
+                    </div>
+                  </template>
+                </div>
               </template>
             </div>
           </div>
@@ -109,19 +148,37 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useMessengerStore } from '@/stores/messengerStore'
 import { useCallStore } from '@/stores/callStore'
 import ChatAvatar from './ChatAvatar.vue'
 
+const emit = defineEmits(['openEdit'])
 const store = useMessengerStore()
 const callStore = useCallStore()
 
-const displayName = computed(() => {
+const isMe = computed(() => store.selectedProfile?.uuid === store.currentUserId)
+
+const directChat = computed(() => {
+  if (!store.selectedProfile) return null
+  return store.chats.find(c => 
+    c.chat_type === 'direct' && 
+    c.sender?.uuid === store.selectedProfile?.uuid
+  )
+})
+
+const originalName = computed(() => {
   const p = store.selectedProfile
   if (!p) return '...'
   return `${p.first_name || ''} ${p.second_name || ''} ${p.last_name || ''}`.replace(/\s+/g, ' ').trim() || 'User'
 })
+
+const displayName = computed(() => {
+  if (directChat.value?.alias) return directChat.value.alias
+  return originalName.value
+})
+
+const hasAlias = computed(() => !!directChat.value?.alias)
 
 const statusText = computed(() => {
   const p = store.selectedProfile
@@ -129,6 +186,23 @@ const statusText = computed(() => {
   if (p.is_online) return 'Online'
   return formatLastSeen(p.last_seen_at)
 })
+
+const newAlias = ref('')
+const savingAlias = ref(false)
+
+watch(() => directChat.value, (chat) => {
+  newAlias.value = chat?.alias || ''
+}, { immediate: true })
+
+async function saveAlias() {
+  if (!directChat.value) return
+  savingAlias.value = true
+  try {
+    await store.updateContactAlias(directChat.value.uuid, newAlias.value || null)
+  } finally {
+    savingAlias.value = false
+  }
+}
 
 function formatLastSeen(ts?: string) {
   if (!ts) return 'Offline'
@@ -144,7 +218,6 @@ function formatLastSeen(ts?: string) {
 
 function startDirectChat() {
     if (store.selectedProfile) {
-        // Find existing direct chat with this user
         const existing = store.chats.find(c => 
             c.chat_type === 'direct' && 
             c.sender?.uuid === store.selectedProfile?.uuid
@@ -153,7 +226,6 @@ function startDirectChat() {
             store.selectChat(existing.uuid)
             store.closeProfile()
         } else {
-            // Future: create new direct chat
             console.log('Should create new direct chat')
             store.closeProfile()
         }
@@ -162,7 +234,6 @@ function startDirectChat() {
 
 function callUser() {
     if (store.selectedProfile) {
-        // Similar to startDirectChat, we need a chat ID to start a call
         const existing = store.chats.find(c => 
             c.chat_type === 'direct' && 
             c.sender?.uuid === store.selectedProfile?.uuid
