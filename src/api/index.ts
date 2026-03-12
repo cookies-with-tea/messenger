@@ -5,6 +5,7 @@ import type {
 	ChatMemberDTO,
 	MessageResponseDTO,
 	UserResponseDTO,
+	ChatMediaCountsDTO,
 } from "@/types";
 
 const IS_DEV = import.meta.env.DEV;
@@ -74,6 +75,14 @@ export const chatApi = {
 		patch<ApiResponse<null>>(`/api/v1/chats/${uuid}/alias`, { alias }),
 
 	leave: (uuid: string) => del<ApiResponse<null>>(`/api/v1/chats/${uuid}`),
+	getMediaCounts: (uuid: string) => get<ApiResponse<ChatMediaCountsDTO>>(`/api/v1/chats/${uuid}/media/counts`),
+	getMedia: (uuid: string, params: { media_type?: string; page?: number; limit?: number } = {}) => {
+		const q = new URLSearchParams();
+		if (params.media_type) q.set("media_type", params.media_type);
+		if (params.page) q.set("page", String(params.page));
+		if (params.limit) q.set("limit", String(params.limit));
+		return get<ApiResponse<MessageResponseDTO[]>>(`/api/v1/chats/${uuid}/media?${q}`);
+	},
 };
 
 // ─── Members ──────────────────────────────────────────────────────

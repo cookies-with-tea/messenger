@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { ref, computed, watch } from "vue";
 import { useWebSocket } from "@vueuse/core";
-import type { ChatResponseDTO, ChatMemberDTO, MessageResponseDTO, UserResponseDTO, DeliveryStatus, WsServerEvent } from "@/types";
+import type { ChatResponseDTO, ChatMemberDTO, MessageResponseDTO, UserResponseDTO, DeliveryStatus, WsServerEvent, ChatMediaCountsDTO } from "@/types";
 import { chatApi, messageApi, mediaApi, userApi, wsUserUrl, tokenStore } from "@/api";
 import { useRouter } from "vue-router";
 
@@ -51,6 +51,9 @@ export const useMessengerStore = defineStore("messenger", () => {
 	const selectedProfile = ref<UserResponseDTO | null>(null);
 	const isProfileModalOpen = ref(false);
 	const profileLoading = ref(false);
+	const mediaCounts = ref<Map<string, ChatMediaCountsDTO>>(new Map());
+	const sharedMedia = ref<Map<string, MessageResponseDTO[]>>(new Map());
+	const sharedMediaLoading = ref(false);
 
 	// ─── Global WebSocket (per-user) ──────────────────────────────────
 	// Подключается один раз при логине, получает события по всем чатам.
@@ -263,6 +266,31 @@ export const useMessengerStore = defineStore("messenger", () => {
 			console.error("[Store] Failed to fetch user profile:", e);
 		} finally {
 			profileLoading.value = false;
+		}
+	}
+	
+	async function fetchMediaCounts(chatUuid: string) {
+		try {
+			const res = await chatApi.getMediaCounts(chatUuid);
+			if (res.data) {
+				mediaCounts.value.set(chatUuid, res.data);
+			}
+		} catch (e) {
+			console.error("[Store] Failed to fetch media counts:", e);
+		}
+	}
+
+	async function fetchSharedMedia(chatUuid: string, type?: string) {
+		sharedMediaLoading.value = true;
+		try {
+			const res = await chatApi.getMedia(chatUuid, { media_type: type });
+			if (res.data) {
+				sharedMedia.value.set(chatUuid + (type || ''), res.data);
+			}
+		} catch (e) {
+			console.error("[Store] Failed to fetch shared media:", e);
+		} finally {
+			sharedMediaLoading.value = false;
 		}
 	}
 
@@ -678,6 +706,11 @@ export const useMessengerStore = defineStore("messenger", () => {
 		profileLoading,
 		openProfile,
 		closeProfile,
+		mediaCounts,
+		sharedMedia,
+		sharedMediaLoading,
+		fetchMediaCounts,
+		fetchSharedMedia,
 		// updates
 		async updateProfile(payload: any) {
 			if (!currentUserId.value) return;

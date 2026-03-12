@@ -55,6 +55,12 @@ export interface ChatResponseDTO {
   alias: string | null
 }
 
+export interface ChatMediaCountsDTO {
+  images: number
+  videos: number
+  audio: number
+}
+
 export interface ChatMemberDTO {
   uuid: string
   chat_uuid: string
