@@ -16,7 +16,7 @@ use crate::{AppState, auth::utils::get_user_from_token, core::{dto::{ApiPaginati
 use super::{
     dto::{
         AddMemberDTO, ChatMemberDTO, ChatResponseDTO, ChatType, CreateChatDTO, CreateMessageDTO,
-        DeliveryStatus, MessageQuery, MessageResponseDTO, UpdateMessageDTO,
+        DeliveryStatus, MessageQuery, MessageResponseDTO, UpdateMessageDTO, SetAliasDTO,
         WsClientAction, WsServerEvent,
     },
     ws::{WsState, handle_socket, handle_user_socket},
@@ -232,6 +232,7 @@ fn map_chat_row(
             is_online: false, // Проставим в get_chats или get_chat где есть доступ к ws_state
             last_seen_at: row.sender_last_seen_at.unwrap_or_else(Utc::now),
         }),
+        alias: row.alias,
     }
 }
 
@@ -302,7 +303,8 @@ pub async fn get_chats(
             cm_other.user_uuid              AS sender_uuid,
             gu.first_name                   AS sender_first_name,
             gu.second_name                  AS sender_second_name,
-            gu.avatar_uuid                       AS sender_avatar_uuid  -- 🔥 Алиас = имя поля в ChatRow
+            gu.avatar_uuid                  AS sender_avatar_uuid,
+            cm.alias                        AS alias
 
         FROM chat c
         JOIN chat_member cm ON cm.chat_uuid = c.uuid
@@ -375,6 +377,7 @@ pub async fn get_chats(
                 is_online: is_online_val,
                 last_seen_at: row.sender_last_seen_at.unwrap_or_else(Utc::now),
             }),
+            alias: row.alias,
         });
     }
 
@@ -440,7 +443,8 @@ pub async fn get_chat(
             gu.first_name                AS sender_first_name,
             gu.second_name               AS sender_second_name,
             gu.avatar_uuid               AS sender_avatar_uuid,
-            gu.last_seen_at              AS sender_last_seen_at
+            gu.last_seen_at              AS sender_last_seen_at,
+            cm.alias                     AS alias
         FROM chat c
         JOIN chat_member cm ON cm.chat_uuid = c.uuid
             AND cm.user_uuid = $2
@@ -491,6 +495,7 @@ pub async fn get_chat(
                    is_online: is_online_val,
                    last_seen_at: row.sender_last_seen_at.unwrap_or_else(Utc::now),
                }),
+               alias: row.alias,
            };
 
            into_api_response(StatusCode::OK, Some(dto), None, None)
@@ -1867,6 +1872,51 @@ pub async fn search_messages(
     }
 }
 
+/// Установить алиас для чата (собеседника)
+#[utoipa::path(
+    patch,
+    path = "/{chat_uuid}/alias",
+    params(("chat_uuid" = Uuid, Path, description = "Chat UUID")),
+    request_body = SetAliasDTO,
+    responses(
+        (status = 200, description = "Alias updated"),
+        (status = 403, description = "Not member"),
+        (status = 404, description = "Not found"),
+    ),
+    tag = "Messenger",
+    security(("bearer_auth" = [])),
+    operation_id = "set_chat_alias",
+)]
+pub async fn set_chat_alias(
+    State(state): State<Arc<AppState>>,
+    Extension(locale): Extension<String>,
+    Extension(me): Extension<Uuid>,
+    Path(chat_uuid): Path<Uuid>,
+    Json(body): Json<SetAliasDTO>,
+) -> Result<Json<ApiResponse<()>>, (StatusCode, Json<ApiResponse<()>>)> {
+    if !assert_member(&state.pool, chat_uuid, me).await {
+        let msg = state.i18n.t("messenger.not_member", &locale).await;
+        return into_api_response(StatusCode::FORBIDDEN, None, None, Some(vec![msg]));
+    }
+
+    let result = sqlx::query(
+        "UPDATE chat_member SET alias = $1 WHERE chat_uuid = $2 AND user_uuid = $3"
+    )
+    .bind(&body.alias)
+    .bind(chat_uuid)
+    .bind(me)
+    .execute(&state.pool)
+    .await;
+
+    match result {
+        Ok(_) => into_api_response(StatusCode::OK, None, None, None),
+        Err(_) => {
+            let msg = state.i18n.t("general.db_error", &locale).await;
+            into_api_response(StatusCode::INTERNAL_SERVER_ERROR, None, Some(error_map("database", &msg)), Some(vec![msg]))
+        }
+    }
+}
+
 
 // ════════════════════════════════════════════════════════════════
 // Router
@@ -1878,6 +1928,7 @@ pub fn router() -> Router<Arc<AppState>> {
         // ── Chats ──────────────────────────────────────────────
         .route("/",            routing::get(get_chats).post(create_chat))
         .route("/{chat_uuid}", routing::get(get_chat).delete(leave_or_delete_chat))
+        .route("/{chat_uuid}/alias", routing::patch(set_chat_alias))
         // ── Members ────────────────────────────────────────────
         .route("/{chat_uuid}/members",            routing::get(get_members).post(add_member))
         .route("/{chat_uuid}/members/{user_uuid}", routing::delete(remove_member))

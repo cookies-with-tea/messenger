@@ -78,6 +78,8 @@ pub struct ChatRow {
     pub sender_avatar_uuid: Option<Uuid>,
     #[sqlx(default)]
     pub sender_last_seen_at: Option<DateTime<Utc>>,
+    #[sqlx(default)]
+    pub alias: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow, ToSchema, Clone)]
@@ -101,6 +103,7 @@ pub struct ChatResponseDTO {
     pub member_count: Option<i64>,
 
     pub sender: Option<UserPreviewDTO>,
+    pub alias: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -191,6 +194,11 @@ pub struct AddMemberDTO {
     pub user_uuid: Uuid,
     #[serde(default)]
     pub is_admin: bool,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SetAliasDTO {
+    pub alias: Option<String>,
 }
 
 // ────────────────────────────────────────────────────────────────

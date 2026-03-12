@@ -485,9 +485,15 @@ async fn delete_one(
 async fn update(
     State(state): State<Arc<AppState>>,
     Extension(locale): Extension<String>,
+    Extension(me): Extension<Uuid>,
     Path(uuid): Path<Uuid>,
     Json(payload): Json<UpdateUserDTO>,
 ) -> Result<Json<ApiResponse<UserResponseDTO>>, (StatusCode, Json<ApiResponse<UserResponseDTO>>)> {
+    if me != uuid {
+        let msg = state.i18n.t("user.not_allowed_to_update", &locale).await;
+        return into_api_response(StatusCode::FORBIDDEN, None, None, Some(vec![msg]));
+    }
+
     let existing_user = sqlx::query_as::<_, User>("SELECT * FROM guest_user WHERE uuid = $1")
         .bind(uuid)
         .fetch_optional(&state.pool)
