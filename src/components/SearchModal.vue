@@ -41,6 +41,13 @@ watch(query, (newVal) => {
   }, 300)
 })
 
+watch(() => props.isOpen, (isOpen) => {
+  if (!isOpen) {
+    query.value = ''
+    results.value = []
+  }
+})
+
 const formatTime = (ts: string) => {
   return new Date(ts).toLocaleDateString() + ' ' + new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }

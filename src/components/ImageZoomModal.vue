@@ -76,7 +76,11 @@ onUnmounted(() => {
     leave-from-class="opacity-100"
     leave-to-class="opacity-0"
   >
-    <div v-if="isOpen" class="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-void/95 backdrop-blur-md">
+    <div 
+      v-if="isOpen" 
+      class="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-void/95 backdrop-blur-md"
+      @click.self="emit('close')"
+    >
       <!-- Close button on top right -->
       <button 
         @click="emit('close')"

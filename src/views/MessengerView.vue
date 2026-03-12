@@ -27,6 +27,9 @@
     <!-- WebRTC Call Modal Overlay -->
     <CallModal />
 
+    <!-- Global Audio Player -->
+    <GlobalAudioPlayer />
+
     <!-- User Profile Modal Overlay -->
     <UserProfileModal @open-edit="isEditProfileOpen = true" />
 
@@ -40,12 +43,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { useMessengerStore } from '@/stores/messengerStore'
 import ChatSidebar from '@/components/ChatSidebar.vue'
 import ChatWindow  from '@/components/ChatWindow.vue'
 import EmptyState  from '@/components/EmptyState.vue'
 import CallModal from '@/components/CallModal.vue'
+import GlobalAudioPlayer from '@/components/GlobalAudioPlayer.vue'
 import UserProfileModal from '@/components/UserProfileModal.vue'
 import EditProfileModal from '@/components/EditProfileModal.vue'
 import { ref } from 'vue'
@@ -53,9 +57,30 @@ import { ref } from 'vue'
 const store = useMessengerStore()
 const isEditProfileOpen = ref(false)
 
+const onKeyDown = (e: KeyboardEvent) => {
+  if (e.key === 'Escape') {
+    if (isEditProfileOpen.value) {
+      isEditProfileOpen.value = false
+    } else if (store.isImageZoomOpen) {
+      store.closeZoom()
+    } else if (store.isSearchModalOpen) {
+      store.isSearchModalOpen = false
+    } else if (store.isProfileModalOpen) {
+      store.closeProfile()
+    } else if (store.activeChatId) {
+      store.activeChatId = null
+    }
+  }
+}
+
 onMounted(() => {
   // Открываем глобальный WS-канал если ещё не открыт (например, после refresh страницы)
   store.initWs()
   store.fetchChats()
+  window.addEventListener('keydown', onKeyDown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeyDown)
 })
 </script>

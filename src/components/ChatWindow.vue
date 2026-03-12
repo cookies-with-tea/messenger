@@ -43,7 +43,11 @@
 
 		<MessageInput @send="handleSend" @typing="messenger.sendTyping(true)" @stop-typing="messenger.sendTyping(false)" />
 
-    <ImageZoomModal :src="zoomSrc" :is-open="isZoomOpen" @close="closeZoom" />
+    <ImageZoomModal 
+      :src="messenger.imageZoomSrc" 
+      :is-open="messenger.isImageZoomOpen" 
+      @close="messenger.closeZoom" 
+    />
 	</div>
 </template>
 
@@ -145,17 +149,5 @@ watch(
 
 function handleSend(text: string) {
 	messenger.sendMessage(text);
-}
-
-const isZoomOpen = ref(false);
-const zoomSrc = ref("");
-
-function openZoom(src: string) {
-  zoomSrc.value = src;
-  isZoomOpen.value = true;
-}
-
-function closeZoom() {
-  isZoomOpen.value = false;
 }
 </script>

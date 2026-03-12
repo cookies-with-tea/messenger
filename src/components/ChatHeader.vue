@@ -77,9 +77,9 @@
 
     <!-- Search Modal -->
     <SearchModal 
-      :is-open="showSearch" 
+      :is-open="store.isSearchModalOpen" 
       :chat-uuid="chat.uuid" 
-      @close="showSearch = false" 
+      @close="store.isSearchModalOpen = false" 
     />
   </div>
 </template>
@@ -96,7 +96,6 @@ import SearchModal from './SearchModal.vue'
 const props = defineProps<{ chat: ChatResponseDTO }>()
 const router = useRouter()
 const store = useMessengerStore()
-const showSearch = ref(false)
 
 function goBack() {
   store.activeChatId = null
@@ -147,7 +146,7 @@ function handleAction(actionType: string) {
   if (actionType === 'call') {
     callStore.startCall(props.chat.uuid)
   } else if (actionType === 'search') {
-    showSearch.value = true
+    store.isSearchModalOpen = true
   }
 }
 

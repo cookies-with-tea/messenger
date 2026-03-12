@@ -52,6 +52,8 @@ watch(() => directChat.value, (chat) => {
 watch(() => store.isProfileModalOpen, (isOpen) => {
   if (isOpen && directChat.value) {
     store.fetchMediaCounts(directChat.value.uuid)
+  } else if (!isOpen) {
+    activeMediaType.value = null
   }
 })
 

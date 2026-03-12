@@ -203,7 +203,9 @@ const statusClass = computed(() => ({
       >
         <VoiceMessage 
           v-if="message.media?.media_type === 'audio'" 
+          :uuid="message.media.uuid"
           :src="message.media.url"
+          :title="message.media.title"
           :is-own="isOwn"
         />
         

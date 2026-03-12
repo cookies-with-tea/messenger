@@ -54,6 +54,13 @@ export const useMessengerStore = defineStore("messenger", () => {
 	const mediaCounts = ref<Map<string, ChatMediaCountsDTO>>(new Map());
 	const sharedMedia = ref<Map<string, MessageResponseDTO[]>>(new Map());
 	const sharedMediaLoading = ref(false);
+	
+	// Search Modal State
+	const isSearchModalOpen = ref(false);
+	
+	// Image Zoom State
+	const isImageZoomOpen = ref(false);
+	const imageZoomSrc = ref("");
 
 	// ─── Global WebSocket (per-user) ──────────────────────────────────
 	// Подключается один раз при логине, получает события по всем чатам.
@@ -80,6 +87,12 @@ export const useMessengerStore = defineStore("messenger", () => {
 	function typingUsersFor(chatUuid: string): string[] {
 		return Array.from(typingMap.value.get(chatUuid) ?? []);
 	}
+
+	const isAnyModalOpen = computed(() => {
+		return isProfileModalOpen.value || 
+			   isSearchModalOpen.value || 
+			   isImageZoomOpen.value;
+	});
 
 	// ─── Helper: display name for a member ───────────────────────────
 	function memberName(m: ChatMemberDTO): string {
@@ -711,6 +724,18 @@ export const useMessengerStore = defineStore("messenger", () => {
 		sharedMediaLoading,
 		fetchMediaCounts,
 		fetchSharedMedia,
+		// modals
+		isSearchModalOpen,
+		isImageZoomOpen,
+		isAnyModalOpen,
+		imageZoomSrc,
+		openZoom(src: string) {
+			imageZoomSrc.value = src;
+			isImageZoomOpen.value = true;
+		},
+		closeZoom() {
+			isImageZoomOpen.value = false;
+		},
 		// updates
 		async updateProfile(payload: any) {
 			if (!currentUserId.value) return;
