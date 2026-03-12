@@ -10,11 +10,17 @@
       </svg>
     </button>
 
-    <ChatAvatar :chat="chatSender" :size="32" class="sm:w-[38px] sm:h-[38px]" :show-status="isDirect" />
+    <ChatAvatar 
+      :chat="chatSender" 
+      :size="32" 
+      class="sm:w-[38px] sm:h-[38px] cursor-pointer hover:scale-105 transition-transform" 
+      :show-status="isDirect"
+      @click="openProfile"
+    />
 
-    <div class="flex-1 min-w-0">
+    <div class="flex-1 min-w-0 cursor-pointer group" @click="openProfile">
       <div class="flex items-center gap-2">
-        <h2 class="text-xs sm:text-sm font-syne font-black text-text-bright truncate leading-tight tracking-tight uppercase">
+        <h2 class="text-xs sm:text-sm font-syne font-black text-text-bright truncate leading-tight tracking-tight uppercase group-hover:text-ember transition-colors">
           {{ displayName }}
         </h2>
         <div v-if="props.chat.sender?.is_online" class="w-1.5 h-1.5 rounded-full bg-sage shadow-[0_0_8px_rgba(var(--color-sage),0.8)] animate-pulse"></div>
@@ -141,6 +147,12 @@ function handleAction(actionType: string) {
     callStore.startCall(props.chat.uuid)
   } else if (actionType === 'search') {
     showSearch.value = true
+  }
+}
+
+function openProfile() {
+  if (props.chat.sender) {
+    store.openProfile(props.chat.sender.uuid)
   }
 }
 

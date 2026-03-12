@@ -46,6 +46,12 @@ export const useMessengerStore = defineStore("messenger", () => {
 	// Track which chats have had their full history fetched
 	const loadedChats = ref<Set<string>>(new Set());
 
+	// Profile Modal State
+	const selectedProfileUserId = ref<string | null>(null);
+	const selectedProfile = ref<UserResponseDTO | null>(null);
+	const isProfileModalOpen = ref(false);
+	const profileLoading = ref(false);
+
 	// ─── Global WebSocket (per-user) ──────────────────────────────────
 	// Подключается один раз при логине, получает события по всем чатам.
 	// immediate: false — открываем вручную через initWs()
@@ -246,6 +252,33 @@ export const useMessengerStore = defineStore("messenger", () => {
 		} catch (e) {
 			console.error("[Store] Failed to fetch current user profile:", e);
 		}
+	}
+
+	async function fetchUserProfile(userId: string) {
+		profileLoading.value = true;
+		try {
+			const res = await userApi.get(userId);
+			selectedProfile.value = res.data;
+		} catch (e) {
+			console.error("[Store] Failed to fetch user profile:", e);
+		} finally {
+			profileLoading.value = false;
+		}
+	}
+
+	function openProfile(userId: string) {
+		selectedProfileUserId.value = userId;
+		selectedProfile.value = null;
+		isProfileModalOpen.value = true;
+		fetchUserProfile(userId);
+	}
+
+	function closeProfile() {
+		isProfileModalOpen.value = false;
+		setTimeout(() => {
+			selectedProfileUserId.value = null;
+			selectedProfile.value = null;
+		}, 300);
 	}
 
 	// ─── Select & open chat ───────────────────────────────────────────
@@ -638,5 +671,12 @@ export const useMessengerStore = defineStore("messenger", () => {
 		togglePinMessage,
 		logout,
 		sendRawWsMessage,
+		// profile
+		selectedProfileUserId,
+		selectedProfile,
+		isProfileModalOpen,
+		profileLoading,
+		openProfile,
+		closeProfile,
 	};
 });

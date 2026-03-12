@@ -171,7 +171,12 @@ const statusClass = computed(() => ({
         v-if="!isOwn && showAvatar"
         class="w-8 h-8 rounded-xl overflow-hidden glass border border-white/10 flex items-center justify-center transition-transform group-hover:scale-105"
       >
-      	<ChatAvatar :chat="message.sender" :size="32" />
+      	<ChatAvatar 
+          :chat="message.sender" 
+          :size="32" 
+          class="cursor-pointer hover:scale-110 transition-transform"
+          @click="store.openProfile(message.sender_uuid)"
+        />
       </div>
     </div>
 

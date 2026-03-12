@@ -32,6 +32,8 @@ export interface UserResponseDTO {
   city: string | null
   role: 'admin' | 'user'
   status: 'active' | 'inactive' | 'in_moderation'
+  is_online: boolean
+  last_seen_at: string
   created_at: string
   updated_at: string
 }

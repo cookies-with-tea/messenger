@@ -26,6 +26,9 @@
     
     <!-- WebRTC Call Modal Overlay -->
     <CallModal />
+
+    <!-- User Profile Modal Overlay -->
+    <UserProfileModal />
   </div>
 </template>
 
@@ -36,6 +39,7 @@ import ChatSidebar from '@/components/ChatSidebar.vue'
 import ChatWindow  from '@/components/ChatWindow.vue'
 import EmptyState  from '@/components/EmptyState.vue'
 import CallModal from '@/components/CallModal.vue'
+import UserProfileModal from '@/components/UserProfileModal.vue'
 
 const store = useMessengerStore()
 
