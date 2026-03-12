@@ -12,7 +12,7 @@ function parseCurrentUserId(): string {
 		if (!token) return "";
 		const parts = token.split(".");
 		if (parts.length < 2) return "";
-		const payload = JSON.parse(atob(parts[1]));
+		const payload = JSON.parse(atob(parts[1] || ""));
 		return payload.sub ?? payload.uuid ?? payload.id ?? "";
 	} catch {
 		return "";
@@ -66,6 +66,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 	const activeChat = computed(() => chats.value.find((c) => c.uuid === activeChatId.value) ?? null);
 
 	const activeMessages = computed(() => (activeChatId.value ? (messages.value.get(activeChatId.value) ?? []) : []));
+	const pinnedMessages = computed(() => activeMessages.value.filter(m => m.is_pinned));
 
 	function typingUsersFor(chatUuid: string): string[] {
 		return Array.from(typingMap.value.get(chatUuid) ?? []);
@@ -120,6 +121,12 @@ export const useMessengerStore = defineStore("messenger", () => {
 				case "status_updated":
 					_applyStatus(ev.payload.chat_uuid, ev.payload.user_uuid, ev.payload.status);
 					break;
+
+				case "message_pinned": {
+					const { chat_uuid, uuid, is_pinned } = ev.payload;
+					_updatePinnedStatus(chat_uuid, uuid, is_pinned);
+					break;
+				}
 
 				case "typing": {
 					const { chat_uuid, user_uuid, is_typing } = ev.payload;
@@ -387,6 +394,16 @@ export const useMessengerStore = defineStore("messenger", () => {
 		}));
 	}
 
+	function togglePinMessage(msgUuid: string, isPinned: boolean) {
+		const chatUuid = activeChatId.value;
+		if (!chatUuid) return;
+
+		send(JSON.stringify({
+			action: "toggle_pin_message",
+			payload: { chat_uuid: chatUuid, uuid: msgUuid, is_pinned: isPinned },
+		}));
+	}
+
 	// ─── Typing events ────────────────────────────────────────────────
 	function sendTyping(isTyping: boolean) {
 		const chatUuid = activeChatId.value;
@@ -500,6 +517,17 @@ export const useMessengerStore = defineStore("messenger", () => {
 		messages.value.set(chatUuid, [...list]);
 	}
 
+	function _updatePinnedStatus(chatUuid: string, msgUuid: string, isPinned: boolean) {
+		const list = messages.value.get(chatUuid);
+		if (!list) return;
+
+		const msg = list.find((m) => m.uuid === msgUuid);
+		if (msg) {
+			msg.is_pinned = isPinned;
+			messages.value.set(chatUuid, [...list]);
+		}
+	}
+
 	async function _bumpChat(chatUuid: string, lastBody: string, lastAt: string) {
 		console.debug("[WS:BumpChat]", { chatUuid, lastBody });
 		let chat = chats.value.find((c) => c.uuid === chatUuid);
@@ -589,6 +617,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 		// computed
 		activeChat,
 		activeMessages,
+		pinnedMessages,
 		typingUsersFor,
 		memberName,
 		// methods
@@ -606,6 +635,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 		markRead,
 		markDelivered,
 		sendReaction,
+		togglePinMessage,
 		logout,
 		sendRawWsMessage,
 	};

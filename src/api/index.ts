@@ -96,6 +96,9 @@ export const messageApi = {
 	markRead: (chatUuid: string) => post<ApiResponse<null>>(`/api/v1/chats/${chatUuid}/messages/read`),
 
 	getByUuid: (chatUuid: string) => get<ApiResponse<MessageResponseDTO>>(`/api/v1/chats/${chatUuid}`),
+
+	search: (chatUuid: string, q: string, limit = 50) =>
+		get<ApiResponse<MessageResponseDTO[]>>(`/api/v1/chats/${chatUuid}/search?q=${encodeURIComponent(q)}&limit=${limit}`),
 };
 
 // ─── WebSocket URL builder ─────────────────────────────────────────

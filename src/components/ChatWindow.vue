@@ -26,6 +26,7 @@
 						  :message="msg"
 						  :is-group="messenger.activeChat?.chat_type === 'group'"
 						  :show-avatar="shouldShowAvatar(group.messages, mIdx)"
+              @image-click="openZoom"
 					  />
 				  </div>
 			  </template>
@@ -39,7 +40,10 @@
       </div>
 		</div>
 
+
 		<MessageInput @send="handleSend" @typing="messenger.sendTyping(true)" @stop-typing="messenger.sendTyping(false)" />
+
+    <ImageZoomModal :src="zoomSrc" :is-open="isZoomOpen" @close="closeZoom" />
 	</div>
 </template>
 
@@ -51,6 +55,7 @@ import ChatHeader from "./ChatHeader.vue";
 import MessageBubble from "./MessageBubble.vue";
 import MessageInput from "./MessageInput.vue";
 import TypingIndicator from "./TypingIndicator.vue";
+import ImageZoomModal from "./ImageZoomModal.vue";
 
 const messenger = useMessengerStore();
 const bottomAnchor = ref<HTMLDivElement>();
@@ -140,5 +145,17 @@ watch(
 
 function handleSend(text: string) {
 	messenger.sendMessage(text);
+}
+
+const isZoomOpen = ref(false);
+const zoomSrc = ref("");
+
+function openZoom(src: string) {
+  zoomSrc.value = src;
+  isZoomOpen.value = true;
+}
+
+function closeZoom() {
+  isZoomOpen.value = false;
 }
 </script>

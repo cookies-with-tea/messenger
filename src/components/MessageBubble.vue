@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
-import 'highlight.js/styles/github-dark.css' // Or any other style
+import 'highlight.js/styles/github-dark.css'
 import { useMessengerStore } from '@/stores/messengerStore'
 import type { MessageResponseDTO } from '@/types'
 import ChatAvatar from './ChatAvatar.vue'
@@ -33,6 +33,8 @@ const props = defineProps<{
   showAvatar?: boolean
   isGroup?: boolean
 }>()
+
+const emit = defineEmits(['image-click'])
 
 const store = useMessengerStore()
 const isOwn = computed(() => props.message.sender_uuid === store.currentUserId)
@@ -67,6 +69,13 @@ const menuItems = computed(() => {
       label: 'Reply', 
       icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5"/></svg>', 
       action: () => { store.replyingToMessage = props.message } 
+    },
+    {
+      label: props.message.is_pinned ? 'Unpin' : 'Pin',
+      icon: props.message.is_pinned 
+        ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>' 
+        : '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5h14M12 5v14m-7 0h14"/></svg>',
+      action: () => { store.togglePinMessage(props.message.uuid, !props.message.is_pinned) }
     }
   ]
 
@@ -152,11 +161,11 @@ const statusClass = computed(() => ({
 
 <template>
   <div
+    :id="`msg-${message.uuid}`"
     class="flex gap-2.5 group animate-slide-up"
     :class="isOwn ? 'flex-row-reverse' : 'flex-row'"
     @contextmenu.prevent="handleContextMenu"
   >
-    <!-- Avatar placeholder for alignment -->
     <div class="w-8 shrink-0">
       <div
         v-if="!isOwn && showAvatar"
@@ -167,7 +176,6 @@ const statusClass = computed(() => ({
     </div>
 
     <div class="flex flex-col gap-1 max-w-[75%] sm:max-w-[70%]" :class="isOwn ? 'items-end' : 'items-start'">
-      <!-- Sender name in group -->
       <span
         v-if="isGroup && !isOwn && showAvatar"
         class="text-[10px] font-mono font-black uppercase tracking-widest px-1 py-0.5"
@@ -176,7 +184,6 @@ const statusClass = computed(() => ({
         {{ senderDisplayName }}
       </span>
 
-      <!-- Reply preview -->
       <div
         v-if="message.reply_body_preview"
         class="text-[10px] font-mono px-3 py-1.5 rounded-xl border border-white/5 text-text-dim bg-white/2 max-w-full truncate backdrop-blur-sm mb-0.5 cursor-pointer hover:bg-white/5 transition-colors"
@@ -185,7 +192,6 @@ const statusClass = computed(() => ({
         <span class="opacity-50 italic">Replying to:</span> {{ message.reply_body_preview }}
       </div>
 
-      <!-- Bubble -->
       <div
         class="relative rounded-2xl transition-all duration-300"
         :class="[bubbleClass, message.media?.media_type === 'audio' ? 'px-2 py-1' : 'px-4 py-2.5']"
@@ -196,12 +202,19 @@ const statusClass = computed(() => ({
           :is-own="isOwn"
         />
         
-        <!-- Image Content -->
-        <div v-else-if="message.media?.media_type === 'image'" class="mb-1 rounded-lg overflow-hidden glass-heavy border border-white/10">
-          <img :src="message.media.url" class="max-w-full max-h-[300px] object-contain block" :alt="message.body" />
+        <div v-else-if="message.media?.media_type === 'image'" 
+             class="mb-1 rounded-lg overflow-hidden glass-heavy border border-white/10 cursor-zoom-in group/img relative"
+             @click="emit('image-click', message.media.url)"
+        >
+          <img :src="message.media.url" class="max-w-full max-h-[300px] object-contain block transition-transform group-hover/img:scale-[1.02]" :alt="message.body" />
+          <div class="absolute inset-0 bg-void/0 group-hover/img:bg-void/10 transition-colors flex items-center justify-center">
+             <svg class="w-8 h-8 text-white opacity-0 group-hover/img:opacity-50 transition-opacity" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M5 8a1 1 0 011-1h1V6a1 1 0 012 0v1h1a1 1 0 110 2H9v1a1 1 0 11-2 0V9H6a1 1 0 01-1-1z" />
+                <path fill-rule="evenodd" d="M2 10a8 8 0 1116 0 8 8 0 01-16 0zm8-6a6 6 0 100 12 6 6 0 000-12z" clip-rule="evenodd" />
+             </svg>
+          </div>
         </div>
 
-        <!-- File Content -->
         <div v-else-if="message.media" class="flex items-center gap-3 mb-1 p-2 rounded-lg bg-white/5 border border-white/10">
           <svg class="w-6 h-6 text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
@@ -220,9 +233,14 @@ const statusClass = computed(() => ({
           v-html="renderedBody"
         ></div>
         
+        <div v-if="message.is_pinned" class="absolute -top-2 -right-2 bg-ember p-1 rounded-full shadow-[0_0_10px_rgba(var(--color-ember),0.6)] z-10">
+          <svg class="w-2.5 h-2.5 text-void" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+          </svg>
+        </div>
+
         <span v-if="message.is_edited && !message.is_deleted" class="absolute -bottom-1 -right-1 text-[8px] font-mono bg-void/80 px-1 rounded border border-white/5 text-muted uppercase">edited</span>
 
-        <!-- Reactions overlay -->
         <div 
           v-if="reactionsGrouped.length" 
           class="absolute -bottom-3 flex flex-wrap gap-1 z-20"
@@ -241,21 +259,17 @@ const statusClass = computed(() => ({
         </div>
       </div>
 
-      <!-- Meta -->
       <div class="flex items-center gap-2 px-1 py-0.5" :class="isOwn ? 'flex-row-reverse' : 'flex-row'">
         <span class="text-[9px] font-mono text-muted tracking-tighter">{{ timeLabel }}</span>
         <div v-if="isOwn" class="flex" :class="statusClass">
-          <!-- Read: Double check -->
           <svg v-if="displayStatus === 'read'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="20 6 9 17 4 12" />
             <polyline points="22 10 13 19 9 15" />
           </svg>
-          <!-- Delivered: Double check -->
           <svg v-else-if="displayStatus === 'delivered'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="20 6 9 17 4 12" />
             <polyline points="22 10 13 19 9 15" />
           </svg>
-          <!-- Sent: Single check -->
           <svg v-else class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="20 6 9 17 4 12" />
           </svg>

@@ -74,6 +74,7 @@ export interface MessageResponseDTO {
   body: string
   is_edited: boolean
   is_deleted: boolean
+  is_pinned: boolean
   created_at: string
   updated_at: string
   sender: UserPreviewDTO | null
@@ -109,6 +110,7 @@ export type WsServerEvent =
   | { event: 'message_edited';  payload: MessageResponseDTO }
   | { event: 'message_deleted'; payload: { uuid: string; chat_uuid: string } }
   | { event: 'status_updated';  payload: { chat_uuid: string; message_uuid: string; user_uuid: string; status: DeliveryStatus } }
+  | { event: 'message_pinned';  payload: { uuid: string; chat_uuid: string; is_pinned: boolean } }
   | { event: 'typing';          payload: { chat_uuid: string; user_uuid: string; is_typing: boolean } }
   | { event: 'member_joined';   payload: ChatMemberDTO }
   | { event: 'member_left';     payload: { chat_uuid: string; user_uuid: string } }
@@ -128,6 +130,7 @@ export type WsClientAction =
   | { action: 'send_message';   payload: { chat_uuid: string; body: string; reply_to_uuid: string | null; media_uuid?: string | null } }
   | { action: 'edit_message';   payload: { uuid: string; body: string } }
   | { action: 'delete_message'; payload: { uuid: string } }
+  | { action: 'toggle_pin_message'; payload: { chat_uuid: string; uuid: string; is_pinned: boolean } }
   | { action: 'mark_delivered'; payload: { chat_uuid: string } }
   | { action: 'mark_read';      payload: { chat_uuid: string } }
   | { action: 'typing';         payload: { is_typing: boolean } }

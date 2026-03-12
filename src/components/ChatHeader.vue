@@ -35,20 +35,62 @@
         <component :is="action.icon" class="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:scale-110 transition-transform" />
       </button>
     </div>
+
+    <!-- Pinned Message Banner -->
+    <Transition
+      enter-active-class="transition duration-300 ease-out"
+      enter-from-class="transform -translate-y-4 opacity-0"
+      enter-to-class="transform translate-y-0 opacity-100"
+      leave-active-class="transition duration-200 ease-in"
+      leave-from-class="transform translate-y-0 opacity-100"
+      leave-to-class="transform -translate-y-4 opacity-0"
+    >
+      <div 
+        v-if="store.pinnedMessages.length > 0"
+        class="absolute top-full left-0 right-0 bg-white/5 backdrop-blur-md border-b border-white/5 px-4 py-2 flex items-center gap-3 cursor-pointer group hover:bg-white/10 transition-colors"
+        @click="scrollToPinned"
+      >
+        <div class="w-1 h-8 bg-ember rounded-full shrink-0 shadow-[0_0_8px_rgba(var(--color-ember),0.5)]"></div>
+        <div class="flex-1 min-w-0">
+          <p class="text-[10px] font-bold text-ember uppercase tracking-wider leading-none">Pinned Message</p>
+          <p class="text-xs text-text-dim truncate mt-0.5 group-hover:text-text-bright transition-colors">
+             {{ lastPinnedMessage?.body || 'Attachment' }}
+          </p>
+        </div>
+        <button 
+          @click.stop="unpinLast"
+          class="p-1.5 rounded-lg text-text-dim hover:text-ember hover:bg-ember/10 transition-all opacity-0 group-hover:opacity-100"
+          title="Unpin"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      </div>
+    </Transition>
+
+    <!-- Search Modal -->
+    <SearchModal 
+      :is-open="showSearch" 
+      :chat-uuid="chat.uuid" 
+      @close="showSearch = false" 
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h } from 'vue'
+import { computed, defineComponent, h, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessengerStore } from '@/stores/messengerStore'
 import { useCallStore } from '@/stores/callStore'
 import type { ChatResponseDTO } from '@/types'
 import ChatAvatar from './ChatAvatar.vue'
+import SearchModal from './SearchModal.vue'
 
 const props = defineProps<{ chat: ChatResponseDTO }>()
 const router = useRouter()
 const store = useMessengerStore()
+const showSearch = ref(false)
 
 function goBack() {
   store.activeChatId = null
@@ -67,8 +109,6 @@ const statusText = computed(() => {
   const typing = store.typingUsersFor(props.chat.uuid)
   if (typing.length > 0) {
     if (props.chat.chat_type === 'direct') return 'Typing...'
-    // For groups, we might want names, but we only have UUIDs in typingMap 
-    // unless we look them up in members. For now, simple count or "Someone is typing"
     return typing.length === 1 ? 'Someone is typing...' : `${typing.length} people are typing...`
   }
 
@@ -99,6 +139,29 @@ const actions = [
 function handleAction(actionType: string) {
   if (actionType === 'call') {
     callStore.startCall(props.chat.uuid)
+  } else if (actionType === 'search') {
+    showSearch.value = true
+  }
+}
+
+const lastPinnedMessage = computed(() => {
+  return store.pinnedMessages[store.pinnedMessages.length - 1]
+})
+
+function scrollToPinned() {
+  if (lastPinnedMessage.value) {
+    const el = document.getElementById(`msg-${lastPinnedMessage.value.uuid}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('animate-highlight')
+      setTimeout(() => el.classList.remove('animate-highlight'), 2000)
+    }
+  }
+}
+
+function unpinLast() {
+  if (lastPinnedMessage.value) {
+    store.togglePinMessage(lastPinnedMessage.value.uuid, false)
   }
 }
 
