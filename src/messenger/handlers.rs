@@ -109,6 +109,7 @@ async fn map_message_row(
         body: row.body,
         is_edited: row.is_edited,
         is_deleted: row.is_deleted,
+        is_pinned: row.is_pinned,
         created_at: row.created_at,
         updated_at: row.updated_at,
 
@@ -878,7 +879,7 @@ pub async fn remove_member(
 const MSG_SELECT: &str = r#"
     SELECT
         m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid, m.body,
-        m.is_edited, m.is_deleted, m.created_at, m.updated_at,
+        m.is_edited, m.is_deleted, m.is_pinned, m.created_at, m.updated_at,
         gu.first_name  AS sender_first_name,
         gu.second_name AS sender_second_name,
         gu.avatar_uuid      AS sender_avatar_uuid,
@@ -1042,7 +1043,7 @@ pub async fn send_message(
         )
         SELECT
             m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid,
-            m.body, m.is_edited, m.is_deleted, m.created_at, m.updated_at,
+            m.body, m.is_edited, m.is_deleted, m.is_pinned, m.created_at, m.updated_at,
             gu.first_name  AS sender_first_name,
             gu.second_name AS sender_second_name,
             gu.avatar_uuid      AS sender_avatar_uuid,
@@ -1105,7 +1106,7 @@ pub async fn edit_message(
         )
         SELECT
             m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid,
-            m.body, m.is_edited, m.is_deleted, m.created_at, m.updated_at,
+            m.body, m.is_edited, m.is_deleted, m.is_pinned, m.created_at, m.updated_at,
             gu.first_name  AS sender_first_name,
             gu.second_name AS sender_second_name,
             gu.avatar_uuid      AS sender_avatar_uuid,
@@ -1324,7 +1325,7 @@ pub async fn ws_upgrade(
                             )
                             SELECT
                                 m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid,
-                                m.body, m.is_edited, m.is_deleted, m.created_at, m.updated_at,
+                                m.body, m.is_edited, m.is_deleted, m.is_pinned, m.created_at, m.updated_at,
                                 gu.first_name  AS sender_first_name,
                                 gu.second_name AS sender_second_name,
                                 gu.avatar_uuid      AS sender_avatar_uuid,
@@ -1387,7 +1388,7 @@ pub async fn ws_upgrade(
                             )
                             SELECT
                                 m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid,
-                                m.body, m.is_edited, m.is_deleted, m.created_at, m.updated_at,
+                                m.body, m.is_edited, m.is_deleted, m.is_pinned, m.created_at, m.updated_at,
                                 gu.first_name  AS sender_first_name,
                                 gu.second_name AS sender_second_name,
                                 gu.avatar_uuid      AS sender_avatar_uuid,
@@ -1458,7 +1459,8 @@ pub async fn ws_upgrade(
                     WsClientAction::CallAnswer { .. } |
                     WsClientAction::IceCandidate { .. } |
                     WsClientAction::CallReject { .. } |
-                    WsClientAction::CallEnd { .. } => None,
+                    WsClientAction::CallEnd { .. } |
+                    WsClientAction::TogglePinMessage { .. } => None,
                 }
             }
         })
@@ -1586,7 +1588,7 @@ pub async fn ws_user_upgrade(
                                 )
                                 SELECT
                                     m.uuid, m.chat_uuid, m.sender_uuid, m.reply_to_uuid,
-                                    m.body, m.is_edited, m.is_deleted, m.created_at, m.updated_at,
+                                    m.body, m.is_edited, m.is_deleted, m.is_pinned, m.created_at, m.updated_at,
                                     gu.first_name  AS sender_first_name,
                                     gu.second_name AS sender_second_name,
                                     gu.avatar_uuid      AS sender_avatar_uuid,
@@ -1773,6 +1775,28 @@ pub async fn ws_user_upgrade(
                             members.retain(|&m| m != user_uuid);
                             user_ws.broadcast_to_users(&members, event).await;
                         }
+
+                        WsClientAction::TogglePinMessage { chat_uuid, uuid, is_pinned } => {
+                            if !assert_member(pool, chat_uuid, user_uuid).await { return; }
+
+                            let affected = sqlx::query(
+                                "UPDATE message SET is_pinned = $1 WHERE uuid = $2 AND chat_uuid = $3"
+                            )
+                            .bind(is_pinned)
+                            .bind(uuid)
+                            .bind(chat_uuid)
+                            .execute(pool)
+                            .await
+                            .map(|r| r.rows_affected())
+                            .unwrap_or(0);
+
+                            if affected > 0 {
+                                let event = WsServerEvent::MessagePinned { uuid, chat_uuid, is_pinned };
+                                let members = get_chat_member_uuids(pool, chat_uuid).await;
+                                user_ws.broadcast_to_users(&members, event).await;
+                            }
+                        }
+
                         WsClientAction::Ping => {
                             let _ = user_ws.send_to_user(user_uuid, WsServerEvent::Pong).await;
                         }
@@ -1785,6 +1809,64 @@ pub async fn ws_user_upgrade(
         }
     })
 }
+
+/// Поиск по сообщениям
+#[utoipa::path(
+    get,
+    path = "/{chat_uuid}/search",
+    params(
+        ("chat_uuid" = Uuid, Path, description = "Chat UUID"),
+        ("q"         = String, Query, description = "Search query"),
+        ("limit"     = Option<i64>, Query, description = "Limit results"),
+    ),
+    responses(
+        (status = 200, body = ApiResponse<Vec<MessageResponseDTO>>),
+    ),
+    tag = "Messenger",
+    security(("bearer_auth" = [])),
+    operation_id = "search_messages",
+)]
+pub async fn search_messages(
+    State(state): State<Arc<AppState>>,
+    Extension(locale): Extension<String>,
+    Extension(me): Extension<Uuid>,
+    Path(chat_uuid): Path<Uuid>,
+    Query(q): Query<super::dto::SearchQuery>,
+) -> Result<Json<ApiResponse<Vec<MessageResponseDTO>>>, (StatusCode, Json<ApiResponse<Vec<MessageResponseDTO>>>)> {
+    if !assert_member(&state.pool, chat_uuid, me).await {
+        let msg = state.i18n.t("messenger.not_member", &locale).await;
+        return into_api_response(StatusCode::FORBIDDEN, None, None, Some(vec![msg]));
+    }
+
+    let limit = q.limit.unwrap_or(50).min(100);
+    let search_pattern = format!("%{}%", q.q);
+
+    let rows = sqlx::query_as::<_, MessageRow>(&format!(
+        "{} WHERE m.chat_uuid = $1 AND m.is_deleted = FALSE AND m.body ILIKE $3 ORDER BY m.created_at DESC LIMIT $4",
+        MSG_SELECT
+    ))
+    .bind(chat_uuid)
+    .bind(me)
+    .bind(search_pattern)
+    .bind(limit)
+    .fetch_all(&state.pool)
+    .await;
+
+    match rows {
+        Ok(rows) => {
+            let mut items = Vec::with_capacity(rows.len());
+            for row in rows {
+                items.push(map_message_row(&state, row).await);
+            }
+            into_api_response(StatusCode::OK, Some(items), None, None)
+        }
+        Err(_) => {
+            let msg = state.i18n.t("general.db_error", &locale).await;
+            into_api_response(StatusCode::INTERNAL_SERVER_ERROR, None, Some(error_map("database", &msg)), Some(vec![msg]))
+        }
+    }
+}
+
 
 // ════════════════════════════════════════════════════════════════
 // Router
@@ -1804,6 +1886,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{chat_uuid}/messages/{msg_uuid}", routing::put(edit_message).delete(delete_message))
         .route("/{chat_uuid}/messages/delivered",  routing::post(mark_delivered))
         .route("/{chat_uuid}/messages/read",       routing::post(mark_read))
+        .route("/{chat_uuid}/search",             routing::get(search_messages))
 }
 
 pub fn ws_router() -> Router<Arc<AppState>> {

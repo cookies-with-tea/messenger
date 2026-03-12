@@ -135,6 +135,8 @@ pub struct MessageRow {
     pub body: String,
     pub is_edited: bool,
     pub is_deleted: bool,
+    #[sqlx(default)]
+    pub is_pinned: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 
@@ -204,6 +206,8 @@ pub struct MessageResponseDTO {
   pub body: String,
   pub is_edited: bool,
   pub is_deleted: bool,
+  #[sqlx(default)]
+  pub is_pinned: bool,
   pub created_at: DateTime<Utc>,
   pub updated_at: DateTime<Utc>,
 
@@ -251,6 +255,12 @@ pub struct MessageQuery {
     pub before_uuid: Option<Uuid>,
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SearchQuery {
+    pub q: String,
+    pub limit: Option<i64>,
+}
+
 // ────────────────────────────────────────────────────────────────
 // WebSocket events
 // ────────────────────────────────────────────────────────────────
@@ -262,6 +272,7 @@ pub enum WsServerEvent {
     NewMessage(MessageResponseDTO),
     MessageEdited(MessageResponseDTO),
     MessageDeleted { uuid: Uuid, chat_uuid: Uuid },
+    MessagePinned { uuid: Uuid, chat_uuid: Uuid, is_pinned: bool },
     StatusUpdated { chat_uuid: Uuid, message_uuid: Uuid, user_uuid: Uuid, status: DeliveryStatus },
     MessageReactionUpdated { chat_uuid: Uuid, message_uuid: Uuid, user_uuid: Uuid, emoji: String, is_added: bool },
     Typing { chat_uuid: Uuid, user_uuid: Uuid, is_typing: bool },
@@ -288,6 +299,8 @@ pub enum WsClientAction {
     EditMessage  { chat_uuid: Uuid, uuid: Uuid, body: String },
     /// Удалить сообщение
     DeleteMessage { chat_uuid: Uuid, uuid: Uuid },
+    /// Toggle pin status of a message
+    TogglePinMessage { chat_uuid: Uuid, uuid: Uuid, is_pinned: bool },
     MarkDelivered { chat_uuid: Uuid },
     MarkRead      { chat_uuid: Uuid },
     /// Добавить/удалить реакцию
