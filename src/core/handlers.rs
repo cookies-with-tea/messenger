@@ -10,7 +10,7 @@ pub async fn get_media(
   entity_uuid: &Uuid,
 ) -> Result<Option<MediaDTO>, sqlx::Error> {
   let query = format!(
-    "SELECT m.url, m.alt, m.title, m.media_type::text as media_type
+    "SELECT m.uuid, m.url, m.alt, m.title, m.media_type::text as media_type
          FROM {} em
          JOIN media m ON em.media_uuid = m.uuid
          WHERE em.{} = $1
@@ -23,6 +23,7 @@ pub async fn get_media(
     .fetch_optional(&state.pool)
     .await?
     .map(|row| MediaDTO {
+      uuid: row.get("uuid"),
       url: row.get("url"),
       alt: row.get("alt"),
       title: row.get("title"),
@@ -38,13 +39,14 @@ pub async fn get_media_by_uuid(
   media_uuid: Option<Uuid>
 ) -> Result<Option<MediaDTO>, sqlx::Error> {
   if let Some(uuid) = media_uuid {
-    let query = "SELECT url, alt, title, media_type::text as media_type FROM media WHERE uuid = $1 LIMIT 1";
+    let query = "SELECT uuid, url, alt, title, media_type::text as media_type FROM media WHERE uuid = $1 LIMIT 1";
 
     let row = sqlx::query(query)
       .bind(uuid)
       .fetch_optional(&state.pool)
       .await?
       .map(|row| MediaDTO {
+        uuid: row.get("uuid"),
         url: row.get("url"),
         alt: row.get("alt"),
         title: row.get("title"),
@@ -76,6 +78,7 @@ pub async fn get_media_by_uuids(
     for row in rows {
         let uuid: Uuid = row.get("uuid");
         map.insert(uuid, MediaDTO {
+            uuid,
             url: row.get("url"),
             alt: row.get("alt"),
             title: row.get("title"),

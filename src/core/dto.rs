@@ -47,6 +47,7 @@ pub struct IconTextDTO {
 
 #[derive(Serialize, Deserialize, Debug, FromRow, ToSchema, Clone)]
 pub struct MediaDTO {
+    pub(crate) uuid: Uuid,
     pub(crate) url: String,
     pub(crate) alt: Option<String>,
     pub(crate) title: Option<String>,
