@@ -26,7 +26,7 @@
 						  :message="msg"
 						  :is-group="messenger.activeChat?.chat_type === 'group'"
 						  :show-avatar="shouldShowAvatar(group.messages, mIdx)"
-              @image-click="openZoom"
+              @image-click="messenger.openZoom"
 					  />
 				  </div>
 			  </template>
@@ -69,7 +69,10 @@ const typingUsers = computed(() => (messenger.activeChatId ? messenger.typingUse
 
 function shouldShowAvatar(messages: MessageResponseDTO[], idx: number): boolean {
 	if (idx === 0) return true;
-	return messages[idx - 1].sender_uuid !== messages[idx].sender_uuid;
+  const prev = messages[idx - 1];
+  const curr = messages[idx];
+  if (!prev || !curr) return true;
+	return prev.sender_uuid !== curr.sender_uuid;
 }
 
 const groupedMessages = computed(() => {

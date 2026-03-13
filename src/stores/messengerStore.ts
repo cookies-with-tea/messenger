@@ -41,6 +41,15 @@ export const useMessengerStore = defineStore("messenger", () => {
 	// uuid → Set<user_uuid> кто сейчас печатает
 	const typingMap = ref<Map<string, Set<string>>>(new Map());
 
+	// Organization State
+	const activeFolder = ref<'all' | 'unread' | 'groups' | 'archived'>('all')
+	
+	const _storedPinned = JSON.parse(localStorage.getItem('pinned_chats') || '[]')
+	const _storedArchived = JSON.parse(localStorage.getItem('archived_chats') || '[]')
+
+	const pinnedChatUuids = ref<Set<string>>(new Set(_storedPinned))
+	const archivedChatUuids = ref<Set<string>>(new Set(_storedArchived))
+
 	// Edition & Reply State
 	const replyingToMessage = ref<MessageResponseDTO | null>(null);
 	const editingMessage = ref<MessageResponseDTO | null>(null);
@@ -85,6 +94,38 @@ export const useMessengerStore = defineStore("messenger", () => {
 
 	const activeMessages = computed(() => (activeChatId.value ? (messages.value.get(activeChatId.value) ?? []) : []));
 	const pinnedMessages = computed(() => activeMessages.value.filter(m => m.is_pinned));
+
+	const filteredChats = computed(() => {
+		let list = [...chats.value]
+
+		// Filter by active folder
+		if (activeFolder.value === 'archived') {
+			list = list.filter(c => archivedChatUuids.value.has(c.uuid))
+		} else {
+			// In non-archived folders, hide archived chats
+			list = list.filter(c => !archivedChatUuids.value.has(c.uuid))
+
+			if (activeFolder.value === 'unread') {
+				list = list.filter(c => c.unread_count && (c.unread_count as number) > 0)
+			} else if (activeFolder.value === 'groups') {
+				list = list.filter(c => c.chat_type === 'group')
+			}
+		}
+
+		// Sort: Pinned first, then by last message time
+		return list.sort((a, b) => {
+			const aPinned = pinnedChatUuids.value.has(a.uuid)
+			const bPinned = pinnedChatUuids.value.has(b.uuid)
+
+			if (aPinned && !bPinned) return -1
+			if (!aPinned && bPinned) return 1
+
+			// Fallback to time sorting
+			const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
+			const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
+			return bTime - aTime
+		})
+	})
 
 	function typingUsersFor(chatUuid: string): string[] {
 		return Array.from(typingMap.value.get(chatUuid) ?? []);
@@ -683,8 +724,41 @@ export const useMessengerStore = defineStore("messenger", () => {
 		activeChatId.value = null;
 		typingMap.value.clear();
 		loadedChats.value.clear();
+		activeFolder.value = 'all'
+		pinnedChatUuids.value = new Set()
+		archivedChatUuids.value = new Set()
 
 		router.push("/login");
+	}
+
+	// ─── Organization Actions ─────────────────────────────────────────
+	function togglePinChat(chatUuid: string) {
+		const next = new Set(pinnedChatUuids.value)
+		if (next.has(chatUuid)) {
+			next.delete(chatUuid)
+		} else {
+			next.add(chatUuid)
+		}
+		pinnedChatUuids.value = next
+		localStorage.setItem('pinned_chats', JSON.stringify(Array.from(next)))
+	}
+
+	function toggleArchiveChat(chatUuid: string) {
+		const next = new Set(archivedChatUuids.value)
+		if (activeFolder.value === 'archived' || next.has(chatUuid)) {
+			next.delete(chatUuid)
+		} else {
+			next.add(chatUuid)
+			// If we archive an active chat, deselect it
+			if (activeChatId.value === chatUuid) activeChatId.value = null
+		}
+		archivedChatUuids.value = next
+		localStorage.setItem('archived_chats', JSON.stringify(Array.from(next)))
+	}
+
+	function setFolder(folder: 'all' | 'unread' | 'groups' | 'archived') {
+		activeFolder.value = folder
+		// If current active chat is not in the new folder, we keep it selected but user might want to switch
 	}
 
 	return {
@@ -778,6 +852,14 @@ export const useMessengerStore = defineStore("messenger", () => {
 				console.error("[Store] Failed to update contact alias:", e);
 				throw e;
 			}
-		}
+		},
+		// organization
+		activeFolder,
+		pinnedChatUuids,
+		archivedChatUuids,
+		filteredChats,
+		togglePinChat,
+		toggleArchiveChat,
+		setFolder
 	};
 });

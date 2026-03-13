@@ -9,14 +9,22 @@ import { useRouter } from 'vue-router'
 const messenger = useMessengerStore()
 const router = useRouter()
 
+const folders = [
+  { id: 'all', label: 'All', icon: '📡' },
+  { id: 'unread', label: 'Unread', icon: '🔔' },
+  { id: 'groups', label: 'Groups', icon: '👥' },
+  { id: 'archived', label: 'Archive', icon: '📦' }
+] as const
+
 const modalOpen = ref(false)
 const logoutModalOpen = ref(false)
 const search = ref('')
 
 const filteredChats = computed(() => {
   const q = search.value.toLowerCase().trim()
-  if (!q) return messenger.chats
-  return messenger.chats.filter(c =>
+  const base = messenger.filteredChats
+  if (!q) return base
+  return base.filter((c: any) =>
     (c.name ?? '').toLowerCase().includes(q) ||
     (c.last_message_body ?? '').toLowerCase().includes(q)
   )
@@ -71,6 +79,24 @@ const confirmLogout = () => {
           class="w-full bg-white/3 border border-white/5 rounded-xl py-2 pl-9 pr-3 text-xs sm:text-sm text-text-base placeholder:text-muted outline-none focus:border-pulse/40 focus:bg-white/6 transition-all font-mono"
         />
       </div>
+    </div>
+
+    <!-- Folders Tab Bar -->
+    <div class="flex items-center gap-1 px-2 py-1.5 border-b border-white/5 bg-white/1 overflow-x-auto no-scrollbar">
+      <button
+        v-for="folder in folders"
+        :key="folder.id"
+        @click="messenger.setFolder(folder.id)"
+        class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-mono font-black uppercase tracking-wider transition-all whitespace-nowrap border"
+        :class="messenger.activeFolder === folder.id 
+          ? 'bg-pulse/10 text-pulse border-pulse/30 shadow-[0_0_15px_rgba(var(--color-pulse),0.1)]' 
+          : 'text-text-dim border-transparent hover:text-text-bright hover:bg-white/5'"
+      >
+        <span class="text-xs">{{ folder.icon }}</span>
+        <span>{{ folder.label }}</span>
+        <span v-if="folder.id === 'unread' && (messenger.chats || []).reduce((acc: number, c: any) => acc + (c?.unread_count || 0), 0) > 0" 
+              class="w-1.5 h-1.5 rounded-full bg-pulse animate-pulse"></span>
+      </button>
     </div>
 
     <!-- Chat list -->
@@ -158,3 +184,13 @@ const confirmLogout = () => {
     </BaseModal>
   </aside>
 </template>
+
+<style scoped>
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+</style>
