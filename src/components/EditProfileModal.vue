@@ -84,6 +84,18 @@
                 </div>
               </div>
             </div>
+
+            <div class="form-group full-width">
+              <div class="toggle-container" @click="settings.setSounds(!settings.soundsEnabled)">
+                <div class="toggle-info">
+                  <label>Sound Effects</label>
+                  <p class="toggle-hint">Procedural blips for interface events</p>
+                </div>
+                <div class="toggle-switch" :class="{ enabled: settings.soundsEnabled }">
+                  <div class="toggle-handle"></div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="modal-footer">

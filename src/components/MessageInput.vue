@@ -1,3 +1,189 @@
+<script setup lang="ts">
+import { ref, computed, nextTick, watch } from 'vue'
+import { useMessengerStore } from '@/stores/messengerStore'
+import VoiceRecorder from './VoiceRecorder.vue'
+import GifPicker from './GifPicker.vue'
+import ContextMenu from './ui/ContextMenu.vue'
+
+const store = useMessengerStore()
+
+const EMOJIS = ['😀','😂','🥹','😎','🤔','🚀','💡','🔥','❤️','👍','👎','🎉','⚡','🌊','🎮','🎨','💻','🤖','👾','⭐','✨','🎯','📱','🏆']
+
+const emit = defineEmits<{
+  send: [text: string]
+  typing: []
+  stopTyping: []
+}>()
+
+const text = ref('')
+const showEmoji = ref(false)
+const showGif = ref(false)
+const pickerMode = ref<'gif' | 'sticker'>('gif')
+const inputRef = ref<HTMLTextAreaElement>()
+const fileInput = ref<HTMLInputElement>()
+
+// Formatting Menu State
+const showFormattingMenu = ref(false)
+const menuX = ref(0)
+const menuY = ref(0)
+const selectedText = ref('')
+const selectionStart = ref(0)
+const selectionEnd = ref(0)
+
+function handleInputContextMenu(e: MouseEvent) {
+  const el = inputRef.value
+  if (!el) return
+
+  const start = el.selectionStart
+  const end = el.selectionEnd
+  
+  if (start !== end) {
+    e.preventDefault()
+    selectionStart.value = start
+    selectionEnd.value = end
+    selectedText.value = text.value.substring(start, end)
+    menuX.value = e.clientX
+    menuY.value = e.clientY
+    showFormattingMenu.value = true
+  }
+}
+
+function formatText(type: 'bold' | 'italic' | 'code' | 'monospace') {
+  const start = selectionStart.value
+  const end = selectionEnd.value
+  const prefix = text.value.substring(0, start)
+  const mid = selectedText.value
+  const suffix = text.value.substring(end)
+
+  let formatted = mid
+  switch (type) {
+    case 'bold': formatted = `**${mid}**`; break
+    case 'italic': formatted = `_${mid}_`; break
+    case 'code': formatted = `\n\`\`\`\n${mid}\n\`\`\`\n`; break
+    case 'monospace': formatted = `\`${mid}\``; break
+  }
+
+  text.value = prefix + formatted + suffix
+  showFormattingMenu.value = false
+  
+  // Refocus and place cursor
+  nextTick(() => {
+    inputRef.value?.focus()
+    const newPos = start + formatted.length
+    inputRef.value?.setSelectionRange(newPos, newPos)
+  })
+}
+
+const formattingItems = computed(() => [
+  { label: 'Bold', action: () => formatText('bold') },
+  { label: 'Italic', action: () => formatText('italic') },
+  { label: 'Monospace', action: () => formatText('monospace') },
+  { label: 'Code Block', action: () => formatText('code') },
+])
+
+let typingTimer: ReturnType<typeof setTimeout> | null = null
+let isTypingActive = false
+
+const textareaHeight = computed(() => {
+  const lines = (text.value.match(/\n/g) ?? []).length + 1
+  return `${Math.min(lines * 24 + 24, 120)}px`
+})
+
+const replySender = computed(() => {
+  const msg = store.replyingToMessage
+  if (!msg) return ''
+  return msg.sender?.first_name || 'User'
+})
+
+// Watch for edit mode
+watch(() => store.editingMessage, (newMsg) => {
+  if (newMsg) {
+    text.value = newMsg.body
+    nextTick(() => inputRef.value?.focus())
+  } else {
+    text.value = ''
+  }
+})
+
+// Focus when replying
+watch(() => store.replyingToMessage, (newMsg) => {
+  if (newMsg) {
+    nextTick(() => inputRef.value?.focus())
+  }
+})
+
+function handleInput() {
+  if (!isTypingActive) {
+    isTypingActive = true
+    emit('typing')
+  }
+  if (typingTimer) clearTimeout(typingTimer)
+  typingTimer = setTimeout(() => {
+    isTypingActive = false
+    emit('stopTyping')
+  }, 2000)
+}
+
+function submit() {
+  const t = text.value.trim()
+  if (!t) return
+
+  if (store.editingMessage) {
+    store.editMessage(store.editingMessage.uuid, t)
+    store.editingMessage = null
+  } else {
+    emit('send', t)
+  }
+  
+  text.value = ''
+  isTypingActive = false
+  emit('stopTyping')
+  if (typingTimer) clearTimeout(typingTimer)
+  nextTick(() => inputRef.value?.focus())
+}
+
+function closeEdit() {
+  store.editingMessage = null
+  text.value = ''
+}
+
+function insertEmoji(emoji: string) {
+  text.value += emoji
+  showEmoji.value = false
+  nextTick(() => inputRef.value?.focus())
+}
+
+function handleVoiceSend(blob: Blob) {
+  store.sendVoiceMessage(blob)
+}
+
+function triggerFileSelect() {
+  fileInput.value?.click()
+}
+
+function handleFileChange(e: Event) {
+  const files = (e.target as HTMLInputElement).files
+  if (files && files[0]) {
+    store.sendFileMessage(files[0])
+    if (fileInput.value) fileInput.value.value = ''
+  }
+}
+
+function openPicker(mode: 'gif' | 'sticker') {
+  if (showGif.value && pickerMode.value === mode) {
+    showGif.value = false
+  } else {
+    pickerMode.value = mode
+    showGif.value = true
+  }
+}
+
+function handleGifSelect(md: string) {
+  emit('send', md)
+  showGif.value = false
+}
+</script>
+
 <template>
   <div class="flex flex-col border-t border-white/5 glass-heavy relative z-20 backdrop-blur-3xl">
     
@@ -106,6 +292,7 @@
           @keydown.enter.exact.prevent="submit"
           @keydown.shift.enter="() => {}"
           @input="handleInput"
+          @contextmenu="handleInputContextMenu"
           rows="1"
           :placeholder="store.editingMessage ? 'Update message...' : 'Broadcast message...'"
           class="w-full bg-white/3 border border-white/5 rounded-2xl px-5 py-3.5 text-sm text-text-bright placeholder:text-muted outline-none focus:border-pulse/40 focus:bg-white/5 resize-none transition-all font-mono leading-relaxed overflow-hidden shadow-inner"
@@ -136,134 +323,18 @@
         </svg>
       </button>
     </div>
+
+    <Teleport to="body">
+      <ContextMenu
+        v-if="showFormattingMenu"
+        :items="formattingItems"
+        :x="menuX"
+        :y="menuY"
+        @close="showFormattingMenu = false"
+      />
+    </Teleport>
   </div>
 </template>
-
-<script setup lang="ts">
-import { ref, computed, nextTick, watch } from 'vue'
-import { useMessengerStore } from '@/stores/messengerStore'
-import VoiceRecorder from './VoiceRecorder.vue'
-import GifPicker from './GifPicker.vue'
-
-const store = useMessengerStore()
-
-const EMOJIS = ['😀','😂','🥹','😎','🤔','🚀','💡','🔥','❤️','👍','👎','🎉','⚡','🌊','🎮','🎨','💻','🤖','👾','⭐','✨','🎯','📱','🏆']
-
-const emit = defineEmits<{
-  send: [text: string]
-  typing: []
-  stopTyping: []
-}>()
-
-const text = ref('')
-const showEmoji = ref(false)
-const showGif = ref(false)
-const pickerMode = ref<'gif' | 'sticker'>('gif')
-const inputRef = ref<HTMLTextAreaElement>()
-const fileInput = ref<HTMLInputElement>()
-
-let typingTimer: ReturnType<typeof setTimeout> | null = null
-let isTypingActive = false
-
-const textareaHeight = computed(() => {
-  const lines = (text.value.match(/\n/g) ?? []).length + 1
-  return `${Math.min(lines * 24 + 24, 120)}px`
-})
-
-const replySender = computed(() => {
-  const msg = store.replyingToMessage
-  if (!msg) return ''
-  return msg.sender?.first_name || 'User'
-})
-
-// Watch for edit mode
-watch(() => store.editingMessage, (newMsg) => {
-  if (newMsg) {
-    text.value = newMsg.body
-    nextTick(() => inputRef.value?.focus())
-  } else {
-    text.value = ''
-  }
-})
-
-// Focus when replying
-watch(() => store.replyingToMessage, (newMsg) => {
-  if (newMsg) {
-    nextTick(() => inputRef.value?.focus())
-  }
-})
-
-function handleInput() {
-  if (!isTypingActive) {
-    isTypingActive = true
-    emit('typing')
-  }
-  if (typingTimer) clearTimeout(typingTimer)
-  typingTimer = setTimeout(() => {
-    isTypingActive = false
-    emit('stopTyping')
-  }, 2000)
-}
-
-function submit() {
-  const t = text.value.trim()
-  if (!t) return
-
-  if (store.editingMessage) {
-    store.editMessage(store.editingMessage.uuid, t)
-    store.editingMessage = null
-  } else {
-    emit('send', t)
-  }
-  
-  text.value = ''
-  isTypingActive = false
-  emit('stopTyping')
-  if (typingTimer) clearTimeout(typingTimer)
-  nextTick(() => inputRef.value?.focus())
-}
-
-function closeEdit() {
-  store.editingMessage = null
-  text.value = ''
-}
-
-function insertEmoji(emoji: string) {
-  text.value += emoji
-  showEmoji.value = false
-  nextTick(() => inputRef.value?.focus())
-}
-
-function handleVoiceSend(blob: Blob) {
-  store.sendVoiceMessage(blob)
-}
-
-function triggerFileSelect() {
-  fileInput.value?.click()
-}
-
-function handleFileChange(e: Event) {
-  const files = (e.target as HTMLInputElement).files
-  if (files && files.length > 0) {
-    store.sendFileMessage(files[0])
-    if (fileInput.value) fileInput.value.value = ''
-  }
-}
-
-function openPicker(mode: 'gif' | 'sticker') {
-  if (showGif.value && pickerMode.value === mode) {
-    showGif.value = false
-  } else {
-    pickerMode.value = mode
-    showGif.value = true
-  }
-}
-
-function handleGifSelect(md: string) {
-  emit('send', md)
-  showGif.value = false
-}
-</script>
 
 <style scoped>
 .emoji-pop-enter-active, .emoji-pop-leave-active {

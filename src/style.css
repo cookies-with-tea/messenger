@@ -150,54 +150,78 @@ body {
 /* ─────────────────────────────────────────────────────────────
    Markdown & Syntax Highlighting
    ───────────────────────────────────────────────────────────── */
+.prose blockquote {
+  border-left: 3px solid var(--color-pulse);
+  background: rgba(var(--accent-color-rgb, 79, 124, 255), 0.05);
+  margin: 0.75rem 0;
+  padding: 0.5rem 1rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+  font-style: italic;
+  color: var(--color-text-base);
+}
+
+.prose p {
+  margin-bottom: 0.5rem;
+}
+
+.prose p:last-child {
+  margin-bottom: 0;
+}
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 1rem 0;
+}
+
 .prose pre {
   margin: 0.5rem 0;
   padding: 0.75rem;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 0.75rem;
   overflow-x: auto;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.prose pre::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 10px rgba(var(--accent-color-rgb, 79, 124, 255), 0.05);
 }
 
 .prose code {
   font-family: var(--font-mono);
   font-size: 0.85em;
   background: rgba(255, 255, 255, 0.1);
-  padding: 0.1em 0.3em;
-  border-radius: 0.3em;
+  color: var(--color-text-bright);
+  padding: 0.15em 0.4em;
+  border-radius: 0.4em;
+  border: 1px solid rgba(var(--accent-color-rgb, 79, 124, 255), 0.3);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 0 5px rgba(var(--accent-color-rgb, 79, 124, 255), 0.1);
 }
 
 .prose pre code {
   background: none;
   padding: 0;
   font-size: 0.9em;
+  color: var(--color-text-bright);
+  border: none;
 }
 
-.prose ul, .prose ol {
-  margin: 0.5rem 0;
-  padding-left: 1.25rem;
+/* Custom scroll for code blocks */
+.prose pre::-webkit-scrollbar {
+  height: 4px;
+}
+.prose pre::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
 }
 
-.prose ul { list-style-type: disc; }
-.prose ol { list-style-type: decimal; }
-
-.prose li { margin: 0.25rem 0; }
-
-.prose p { margin: 0.5rem 0; }
-.prose p:first-child { margin-top: 0; }
-.prose p:last-child { margin-bottom: 0; }
-
-.prose a {
-  color: var(--color-pulse-glow);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.prose a:hover {
-  color: var(--color-neon);
-}
-
-/* Base HLJS colors Override if needed */
 .hljs {
   color: var(--color-text-bright);
 }

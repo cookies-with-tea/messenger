@@ -33,6 +33,7 @@ export type AccentColorKey = keyof typeof accentColors;
 export const useSettingsStore = defineStore("settings", () => {
   const accentColor = ref<AccentColorKey>((localStorage.getItem("accent_color") as AccentColorKey) || "blue");
   const notificationsEnabled = ref(localStorage.getItem("notifications_enabled") === "true");
+  const soundsEnabled = ref(localStorage.getItem("sounds_enabled") !== "false"); // Default to true
 
   function setAccentColor(color: AccentColorKey) {
     accentColor.value = color;
@@ -43,6 +44,11 @@ export const useSettingsStore = defineStore("settings", () => {
   function setNotifications(enabled: boolean) {
     notificationsEnabled.value = enabled;
     localStorage.setItem("notifications_enabled", enabled.toString());
+  }
+
+  function setSounds(enabled: boolean) {
+    soundsEnabled.value = enabled;
+    localStorage.setItem("sounds_enabled", enabled.toString());
   }
 
   function applyTheme(colorKey: AccentColorKey) {
@@ -65,8 +71,10 @@ export const useSettingsStore = defineStore("settings", () => {
   return {
     accentColor,
     notificationsEnabled,
+    soundsEnabled,
     setAccentColor,
     setNotifications,
+    setSounds,
     applyTheme,
   };
 });
