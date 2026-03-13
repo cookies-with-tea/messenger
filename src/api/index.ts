@@ -8,6 +8,8 @@ import type {
 	ChatMediaCountsDTO,
 } from "@/types";
 
+import { useToastStore } from "@/stores/toastStore";
+
 const IS_DEV = import.meta.env.DEV;
 const BASE = IS_DEV ? "" : (import.meta.env.VITE_BASE_URL ?? "http://localhost:8080");
 
@@ -16,46 +18,64 @@ function authHeaders(): Record<string, string> {
 	return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+	const toast = useToastStore();
+	try {
+		const res = await fetch(`${BASE}${path}`, {
+			...options,
+			headers: { 
+				"Content-Type": "application/json", 
+				...authHeaders(),
+				...options.headers 
+			},
+		});
+
+		const data = await res.json();
+
+		if (!res.ok) {
+			const errorMsg = data.errors?.[0] || data.messages?.[0] || `Request failed with status ${res.status}`;
+			toast.error(errorMsg);
+			throw new Error(errorMsg);
+		}
+
+		return data;
+	} catch (err: any) {
+		if (!(err instanceof Error)) {
+			toast.error("Network error. Please check your connection.");
+		}
+		throw err;
+	}
+}
+
 async function get<T>(path: string): Promise<T> {
-	const res = await fetch(`${BASE}${path}`, {
-		headers: { "Content-Type": "application/json", ...authHeaders() },
-	});
-	return res.json();
+	return request<T>(path);
 }
 
 async function post<T>(path: string, body?: unknown): Promise<T> {
-	const res = await fetch(`${BASE}${path}`, {
+	return request<T>(path, {
 		method: "POST",
-		headers: { "Content-Type": "application/json", ...authHeaders() },
 		body: body != null ? JSON.stringify(body) : undefined,
 	});
-	return res.json();
 }
 
 async function put<T>(path: string, body?: unknown): Promise<T> {
-	const res = await fetch(`${BASE}${path}`, {
+	return request<T>(path, {
 		method: "PUT",
-		headers: { "Content-Type": "application/json", ...authHeaders() },
 		body: body != null ? JSON.stringify(body) : undefined,
 	});
-	return res.json();
 }
 
 async function patch<T>(path: string, body?: unknown): Promise<T> {
-	const res = await fetch(`${BASE}${path}`, {
+	return request<T>(path, {
 		method: "PATCH",
-		headers: { "Content-Type": "application/json", ...authHeaders() },
 		body: body != null ? JSON.stringify(body) : undefined,
 	});
-	return res.json();
 }
 
 async function del<T>(path: string): Promise<T> {
-	const res = await fetch(`${BASE}${path}`, {
+	return request<T>(path, {
 		method: "DELETE",
-		headers: { "Content-Type": "application/json", ...authHeaders() },
 	});
-	return res.json();
 }
 
 // ─── Chats ────────────────────────────────────────────────────────

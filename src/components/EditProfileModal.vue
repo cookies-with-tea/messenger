@@ -51,6 +51,41 @@
             </div>
           </div>
 
+          <!-- New: Theme & Notifications Section -->
+          <div class="settings-section">
+            <h4 class="section-title">App Settings</h4>
+            
+            <div class="form-group full-width">
+              <label>Accent Color (Pulsar Theme)</label>
+              <div class="theme-grid">
+                <button 
+                  v-for="(color, key) in accentColors" 
+                  :key="key" 
+                  type="button"
+                  class="theme-btn"
+                  :class="{ active: settings.accentColor === key }"
+                  :style="{ '--btn-color': color.pulse }"
+                  @click="settings.setAccentColor(key)"
+                >
+                  <div class="color-dot"></div>
+                  <span>{{ color.label }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group full-width">
+              <div class="toggle-container" @click="toggleNotifications">
+                <div class="toggle-info">
+                  <label>Desktop Notifications</label>
+                  <p class="toggle-hint">Get alerts when you're in another tab</p>
+                </div>
+                <div class="toggle-switch" :class="{ enabled: settings.notificationsEnabled }">
+                  <div class="toggle-handle"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" @click="close">Cancel</button>
             <button type="submit" class="btn btn-primary" :disabled="loading">
@@ -67,6 +102,9 @@
 <script setup lang="ts">
 import { ref, reactive, watch } from 'vue';
 import { useMessengerStore } from '@/stores/messengerStore';
+import { useSettingsStore, accentColors } from '@/stores/settingsStore';
+import { useToastStore } from '@/stores/toastStore';
+import { requestNotificationPermission } from '@/api/notifications';
 import { mediaApi } from '@/api';
 
 const props = defineProps<{
@@ -76,6 +114,7 @@ const props = defineProps<{
 
 const emit = defineEmits(['close']);
 const store = useMessengerStore();
+const settings = useSettingsStore();
 const loading = ref(false);
 
 const form = reactive({
@@ -119,15 +158,28 @@ async function handleAvatarUpload(event: Event) {
   }
 }
 
+const toast = useToastStore();
+
 async function handleSave() {
   loading.value = true;
   try {
     await store.updateProfile({ ...form });
+    toast.success('Profile updated successfully!');
     close();
   } catch (e) {
+    // Error is already handled by api/index.ts via toast
     console.error('Failed to save profile:', e);
   } finally {
     loading.value = false;
+  }
+}
+
+async function toggleNotifications() {
+  if (!settings.notificationsEnabled) {
+    const granted = await requestNotificationPermission();
+    if (granted) settings.setNotifications(true);
+  } else {
+    settings.setNotifications(false);
   }
 }
 </script>
@@ -340,5 +392,112 @@ async function handleSave() {
 .modal-leave-to {
   opacity: 0;
   transform: scale(0.9);
+}
+
+/* Settings Styles */
+.settings-section {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-pulse-glow);
+}
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.theme-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+
+.theme-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.theme-btn.active {
+  background: rgba(var(--btn-color), 0.1);
+  border-color: var(--btn-color);
+  box-shadow: 0 0 15px rgba(var(--btn-color), 0.2);
+}
+
+.color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--btn-color);
+  box-shadow: 0 0 8px var(--btn-color);
+}
+
+.toggle-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  cursor: pointer;
+  margin-top: 12px;
+}
+
+.toggle-info label {
+  margin-bottom: 2px !important;
+  cursor: pointer;
+}
+
+.toggle-hint {
+  font-size: 0.75rem;
+  opacity: 0.5;
+  margin: 0;
+}
+
+.toggle-switch {
+  width: 44px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  position: relative;
+  transition: background 0.3s;
+}
+
+.toggle-switch.enabled {
+  background: var(--color-pulse);
+}
+
+.toggle-handle {
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.toggle-switch.enabled .toggle-handle {
+  transform: translateX(20px);
 }
 </style>

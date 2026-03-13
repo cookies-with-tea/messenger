@@ -15,9 +15,12 @@
   --color-text-dim:    rgb(107, 116, 144);
   --color-text-base:   rgb(168, 178, 204);
   --color-text-bright: rgb(226, 232, 248);
-  --color-pulse:       rgb(79, 124, 255);
-  --color-pulse-dim:   rgb(42, 74, 204);
-  --color-pulse-glow:  rgb(107, 147, 255);
+  
+  /* Dynamic Accent Colors */
+  --color-pulse:       var(--accent-color, rgb(79, 124, 255));
+  --color-pulse-dim:   var(--accent-color-dim, rgb(42, 74, 204));
+  --color-pulse-glow:  var(--accent-color-glow, rgb(107, 147, 255));
+  
   --color-neon:        rgb(0, 229, 255);
   --color-neon-dim:    rgb(0, 153, 179);
   --color-ember:       rgb(255, 107, 53);

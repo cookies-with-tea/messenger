@@ -246,6 +246,21 @@ const statusClass = computed(() => ({
           </svg>
         </div>
 
+        <!-- Quick Reaction Bar on Hover -->
+        <div 
+          class="absolute -top-8 left-1/2 -translate-x-1/2 flex gap-1 px-1.5 py-1 glass-heavy rounded-full border border-white/10 shadow-xl scale-90 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-200 pointer-events-none group-hover:pointer-events-auto z-30"
+          v-if="!message.is_deleted"
+        >
+          <button 
+            v-for="emoji in QUICK_REACTIONS" 
+            :key="emoji"
+            @click.stop="toggleReaction(emoji)"
+            class="w-7 h-7 flex items-center justify-center hover:bg-white/10 rounded-full transition-colors text-sm"
+          >
+            {{ emoji }}
+          </button>
+        </div>
+
         <span v-if="message.is_edited && !message.is_deleted" class="absolute -bottom-1 -right-1 text-[8px] font-mono bg-void/80 px-1 rounded border border-white/5 text-muted uppercase">edited</span>
 
         <div 

@@ -3,6 +3,8 @@ import { ref, computed, watch } from "vue";
 import { useWebSocket } from "@vueuse/core";
 import type { ChatResponseDTO, ChatMemberDTO, MessageResponseDTO, UserResponseDTO, DeliveryStatus, WsServerEvent, ChatMediaCountsDTO } from "@/types";
 import { chatApi, messageApi, mediaApi, userApi, wsUserUrl, tokenStore } from "@/api";
+import { showNotification } from "@/api/notifications";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useRouter } from "vue-router";
 
 // UUID текущего пользователя — берётся из JWT payload
@@ -127,6 +129,16 @@ export const useMessengerStore = defineStore("messenger", () => {
 							markRead(msg.chat_uuid);
 						} else {
 							markDelivered(msg.chat_uuid);
+						}
+
+						// Desktop Notification
+						const settings = useSettingsStore();
+						if (settings.notificationsEnabled) {
+							const chat = chats.value.find(c => c.uuid === msg.chat_uuid);
+							showNotification(chat?.name || msg.sender?.first_name || "New Message", {
+								body: msg.body,
+								icon: msg.sender?.avatar?.url || "/vite.svg"
+							});
 						}
 					}
 					break;
