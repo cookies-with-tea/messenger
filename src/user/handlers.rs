@@ -418,8 +418,13 @@ async fn get_one(
 async fn delete_one(
     State(state): State<Arc<AppState>>,
     Extension(locale): Extension<String>,
+    Extension(me): Extension<Uuid>,
     Path(uuid): Path<Uuid>,
 ) -> Result<Json<ApiResponse<()>>, (StatusCode, Json<ApiResponse<()>>)> {
+    if me != uuid {
+        let msg = state.i18n.t("user.not_allowed_to_delete", &locale).await;
+        return into_api_response(StatusCode::FORBIDDEN, None, None, Some(vec![msg]));
+    }
     let exists =
         sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM guest_user WHERE uuid = $1)")
             .bind(uuid)
@@ -729,9 +734,10 @@ async fn update(
 pub fn public_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(get_all).post(create))
-        .route("/{id}", get(get_one).delete(delete_one).patch(update))
+        .route("/{uuid}", get(get_one))
 }
 
 pub fn protected_router() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/{uuid}", axum::routing::delete(delete_one).patch(update))
 }
