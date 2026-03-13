@@ -17,7 +17,7 @@ use super::{
     dto::{
         AddMemberDTO, ChatMemberDTO, ChatResponseDTO, ChatType, CreateChatDTO, CreateMessageDTO,
         DeliveryStatus, MessageQuery, MessageResponseDTO, UpdateMessageDTO, SetAliasDTO,
-        ChatMediaCountsDTO,
+        ChatMediaCountsDTO, MessageReceiptDTO, MessageReceiptRow,
         WsClientAction, WsServerEvent,
     },
     ws::{WsState, handle_socket, handle_user_socket},
@@ -1816,6 +1816,83 @@ pub async fn ws_user_upgrade(
     })
 }
 
+/// Детальные статусы сообщения (кто прочитал/получил)
+#[utoipa::path(
+    get,
+    path = "/{chat_uuid}/messages/{msg_uuid}/receipts",
+    params(
+        ("chat_uuid" = Uuid, Path, description = "Chat UUID"),
+        ("msg_uuid"  = Uuid, Path, description = "Message UUID"),
+    ),
+    responses(
+        (status = 200, body = ApiResponse<Vec<MessageReceiptDTO>>),
+        (status = 403, body = ApiResponse<Vec<MessageReceiptDTO>>),
+    ),
+    tag = "Messenger",
+    security(("bearer_auth" = [])),
+    operation_id = "get_message_receipts",
+)]
+pub async fn get_message_receipts(
+    State(state): State<Arc<AppState>>,
+    Extension(locale): Extension<String>,
+    Extension(me): Extension<Uuid>,
+    Path((chat_uuid, msg_uuid)): Path<(Uuid, Uuid)>,
+) -> Result<Json<ApiResponse<Vec<MessageReceiptDTO>>>, (StatusCode, Json<ApiResponse<Vec<MessageReceiptDTO>>>)> {
+    if !assert_member(&state.pool, chat_uuid, me).await {
+        let msg = state.i18n.t("messenger.not_member", &locale).await;
+        return into_api_response(StatusCode::FORBIDDEN, None, None, Some(vec![msg]));
+    }
+
+    let rows = sqlx::query_as::<_, MessageReceiptRow>(
+        r#"
+        SELECT
+            ms.user_uuid,
+            gu.first_name,
+            gu.second_name,
+            gu.avatar_uuid,
+            ms.status,
+            ms.created_at
+        FROM message_status ms
+        JOIN guest_user gu ON gu.uuid = ms.user_uuid
+        WHERE ms.message_uuid = $1
+        ORDER BY ms.created_at DESC
+        "#,
+    )
+    .bind(msg_uuid)
+    .fetch_all(&state.pool)
+    .await;
+
+    match rows {
+        Ok(rows) => {
+            let mut items = Vec::with_capacity(rows.len());
+            for row in rows {
+                let avatar = get_media_by_uuid(&state, row.avatar_uuid)
+                    .await
+                    .ok()
+                    .flatten();
+
+                items.push(MessageReceiptDTO {
+                    user: UserPreviewDTO {
+                        uuid: row.user_uuid,
+                        first_name: row.first_name,
+                        second_name: row.second_name,
+                        avatar,
+                        is_online: if let Some(ws) = &state.user_ws_state { ws.is_online(row.user_uuid).await } else { false },
+                        last_seen_at: Utc::now(),
+                    },
+                    status: row.status,
+                    created_at: row.created_at,
+                });
+            }
+            into_api_response(StatusCode::OK, Some(items), None, None)
+        }
+        Err(_) => {
+            let msg = state.i18n.t("general.db_error", &locale).await;
+            into_api_response(StatusCode::INTERNAL_SERVER_ERROR, None, Some(error_map("database", &msg)), Some(vec![msg]))
+        }
+    }
+}
+
 /// Поиск по сообщениям
 #[utoipa::path(
     get,
@@ -1872,6 +1949,57 @@ pub async fn search_messages(
         }
     }
 }
+
+/// Глобальный поиск по всем сообщениям пользователя
+#[utoipa::path(
+    get,
+    path = "/search",
+    params(
+        ("q"         = String, Query, description = "Search query"),
+        ("limit"     = Option<i64>, Query, description = "Limit results"),
+    ),
+    responses(
+        (status = 200, body = ApiResponse<Vec<MessageResponseDTO>>),
+    ),
+    tag = "Messenger",
+    security(("bearer_auth" = [])),
+    operation_id = "global_search_messages",
+)]
+pub async fn global_search_messages(
+    State(state): State<Arc<AppState>>,
+    Extension(me): Extension<Uuid>,
+    Query(q): Query<super::dto::SearchQuery>,
+) -> Result<Json<ApiResponse<Vec<MessageResponseDTO>>>, (StatusCode, Json<ApiResponse<Vec<MessageResponseDTO>>>)> {
+    let limit = q.limit.unwrap_or(50).min(100);
+    let search_pattern = format!("%{}%", q.q);
+
+    let rows = sqlx::query_as::<_, MessageRow>(&format!(
+        "{} JOIN chat_member cm ON cm.chat_uuid = m.chat_uuid AND cm.user_uuid = $1 AND cm.left_at IS NULL WHERE m.is_deleted = FALSE AND m.body ILIKE $3 ORDER BY m.created_at DESC LIMIT $4",
+        MSG_SELECT
+    ))
+    .bind(me)          // $1 -> cm.user_uuid
+    .bind(me)          // $2 -> my_status inside MSG_SELECT
+    .bind(search_pattern) // $3 -> ILIKE $3
+    .bind(limit)        // $4 -> LIMIT $4
+    .fetch_all(&state.pool)
+    .await;
+
+    match rows {
+        Ok(rows) => {
+            let mut items = Vec::with_capacity(rows.len());
+            for row in rows {
+                items.push(map_message_row(&state, row).await);
+            }
+            into_api_response(StatusCode::OK, Some(items), None, None)
+        }
+        Err(e) => {
+            eprintln!("Global search error: {:?}", e);
+            let msg = state.i18n.t("general.db_error", "en").await; // Fallback to en if Extension(locale) not provided
+            into_api_response(StatusCode::INTERNAL_SERVER_ERROR, None, Some(error_map("database", &msg)), Some(vec![msg]))
+        }
+    }
+}
+
 
 /// Установить алиас для чата (собеседника)
 #[utoipa::path(
@@ -2047,6 +2175,7 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         // ── Chats ──────────────────────────────────────────────
         .route("/",            routing::get(get_chats).post(create_chat))
+        .route("/search",      routing::get(global_search_messages))
         .route("/{chat_uuid}", routing::get(get_chat).delete(leave_or_delete_chat))
         .route("/{chat_uuid}/alias", routing::patch(set_chat_alias))
         // ── Members ────────────────────────────────────────────
@@ -2057,6 +2186,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{chat_uuid}/messages/{msg_uuid}", routing::put(edit_message).delete(delete_message))
         .route("/{chat_uuid}/messages/delivered",  routing::post(mark_delivered))
         .route("/{chat_uuid}/messages/read",       routing::post(mark_read))
+        .route("/{chat_uuid}/messages/{msg_uuid}/receipts", routing::get(get_message_receipts))
         .route("/{chat_uuid}/search",             routing::get(search_messages))
         .route("/{chat_uuid}/media/counts",       routing::get(get_chat_media_counts))
         .route("/{chat_uuid}/media",               routing::get(get_chat_media))

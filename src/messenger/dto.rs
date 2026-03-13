@@ -175,6 +175,23 @@ pub struct MessageRow {
     pub media_uuid: Option<Uuid>,
 }
 
+#[derive(Debug, FromRow)]
+pub struct MessageReceiptRow {
+    pub user_uuid: Uuid,
+    pub first_name: Option<String>,
+    pub second_name: Option<String>,
+    pub avatar_uuid: Option<Uuid>,
+    pub status: DeliveryStatus,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema, Clone)]
+pub struct MessageReceiptDTO {
+    pub user: UserPreviewDTO,
+    pub status: DeliveryStatus,
+    pub created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Serialize, Deserialize, FromRow, ToSchema, Clone)]
 pub struct ChatMemberDTO {
     pub uuid: Uuid,
