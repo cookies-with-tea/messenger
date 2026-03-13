@@ -68,6 +68,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 	
 	// Search Modal State
 	const isSearchModalOpen = ref(false);
+	const isGlobalSearchModalOpen = ref(false);
 	
 	// Image Zoom State
 	const isImageZoomOpen = ref(false);
@@ -134,6 +135,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 	const isAnyModalOpen = computed(() => {
 		return isProfileModalOpen.value || 
 			   isSearchModalOpen.value || 
+			   isGlobalSearchModalOpen.value ||
 			   isImageZoomOpen.value;
 	});
 
@@ -812,6 +814,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 		fetchSharedMedia,
 		// modals
 		isSearchModalOpen,
+		isGlobalSearchModalOpen,
 		isImageZoomOpen,
 		isAnyModalOpen,
 		imageZoomSrc,

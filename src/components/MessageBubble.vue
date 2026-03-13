@@ -8,6 +8,9 @@ import type { MessageResponseDTO } from '@/types'
 import ChatAvatar from './ChatAvatar.vue'
 import VoiceMessage from './VoiceMessage.vue'
 import ContextMenu from './ui/ContextMenu.vue'
+import ReadReceiptsModal from './ReadReceiptsModal.vue'
+
+const isReceiptsModalOpen = ref(false)
 
 const md: MarkdownIt = new MarkdownIt({
   html: false,
@@ -283,7 +286,7 @@ const statusClass = computed(() => ({
 
       <div class="flex items-center gap-2 px-1 py-0.5" :class="isOwn ? 'flex-row-reverse' : 'flex-row'">
         <span class="text-[9px] font-mono text-muted tracking-tighter">{{ timeLabel }}</span>
-        <div v-if="isOwn" class="flex" :class="statusClass">
+        <div v-if="isOwn" class="flex cursor-pointer hover:opacity-80 transition-opacity" :class="statusClass" @click="isReceiptsModalOpen = true">
           <svg v-if="displayStatus === 'read'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="20 6 9 17 4 12" />
             <polyline points="22 10 13 19 9 15" />
@@ -307,6 +310,14 @@ const statusClass = computed(() => ({
       :y="menuY"
       @emoji="toggleReaction"
       @close="showMenu = false"
+    />
+
+    <ReadReceiptsModal
+      v-if="isReceiptsModalOpen"
+      :is-open="isReceiptsModalOpen"
+      :chat-uuid="message.chat_uuid"
+      :message-uuid="message.uuid"
+      @close="isReceiptsModalOpen = false"
     />
   </div>
 </template>

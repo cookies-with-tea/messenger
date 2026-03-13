@@ -95,6 +95,12 @@ export interface MessageResponseDTO {
   reactions: ReactionDTO[]
 }
 
+export interface MessageReceiptDTO {
+  user: UserPreviewDTO
+  status: DeliveryStatus
+  created_at: string
+}
+
 // ─── API wrappers ─────────────────────────────────────────────────
 export interface ApiResponse<T> {
   data: T | null

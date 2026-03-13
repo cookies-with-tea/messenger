@@ -1,45 +1,49 @@
 <template>
-	<div class="flex flex-col h-full bg-transparent">
+	<div class="flex flex-col h-full bg-transparent overflow-hidden">
 		<ChatHeader :chat="messenger.activeChat!" />
 
 		<!-- Messages -->
-		<div
-			ref="messagesEl"
-			class="flex-1 overflow-y-auto scroll-smooth scrollbar-thin bg-transparent"
+		<DynamicScroller
+			:items="flattenedItems"
+			:min-item-size="40"
+			class="flex-1 scrollbar-thin bg-transparent"
 			@scroll="onScroll"
+			ref="scroller"
+      key-field="id"
 		>
-      <div class="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-1 sm:space-y-1.5">
-			  <!-- Load more -->
-			  <div v-if="messenger.messagesLoading" class="flex justify-center py-2">
-				  <span class="text-[10px] sm:text-xs font-mono text-muted animate-pulse font-bold tracking-widest uppercase">Scanning Stream...</span>
-			  </div>
-
-			  <template v-for="(group) in groupedMessages" :key="group.date">
-				  <div class="flex items-center gap-3 py-4">
-					  <div class="flex-1 h-px bg-white/5" />
-					  <span class="text-[9px] sm:text-[10px] font-mono font-black text-muted px-4 py-1 rounded-full glass border border-white/5 uppercase tracking-widest">{{ group.date }}</span>
-					  <div class="flex-1 h-px bg-white/5" />
-				  </div>
-
-				  <div v-for="(msg, mIdx) in group.messages" :key="msg.uuid" :id="`msg-${msg.uuid}`" class="mb-0.5">
-					  <MessageBubble
-						  :message="msg"
-						  :is-group="messenger.activeChat?.chat_type === 'group'"
-						  :show-avatar="shouldShowAvatar(group.messages, mIdx)"
+      <template v-slot="{ item, index, active }">
+        <DynamicScrollerItem
+          :item="item"
+          :active="active"
+          :data-index="index"
+          :size-dependencies="[item.message?.body, item.message?.media]"
+        >
+          <div v-if="item.type === 'date'" class="max-w-3xl mx-auto px-4 sm:px-6">
+            <div class="flex items-center gap-3 py-4">
+              <div class="flex-1 h-px bg-white/5" />
+              <span class="text-[9px] sm:text-[10px] font-mono font-black text-muted px-4 py-1 rounded-full glass border border-white/5 uppercase tracking-widest">{{ item.date }}</span>
+              <div class="flex-1 h-px bg-white/5" />
+            </div>
+          </div>
+          <div v-else-if="item.type === 'message'" :id="`msg-${item.message.uuid}`" class="mb-0.5 max-w-3xl mx-auto px-4 sm:px-6">
+            <MessageBubble
+              :message="item.message"
+              :is-group="messenger.activeChat?.chat_type === 'group'"
+              :show-avatar="item.showAvatar"
               @image-click="messenger.openZoom"
-					  />
-				  </div>
-			  </template>
-
-			  <!-- Typing -->
-			  <div v-if="typingUsers.length > 0" class="pt-2">
-				  <TypingIndicator :user-ids="typingUsers" />
-			  </div>
-
-			  <div ref="bottomAnchor" />
-      </div>
-		</div>
-
+            />
+          </div>
+          <div v-else-if="item.type === 'typing'" class="max-w-3xl mx-auto px-4 sm:px-6 pt-2 pb-8">
+            <TypingIndicator :user-ids="typingUsers" />
+          </div>
+        </DynamicScrollerItem>
+      </template>
+      <template #before>
+        <div v-if="messenger.messagesLoading" class="flex justify-center py-4">
+          <span class="text-[10px] sm:text-xs font-mono text-muted animate-pulse font-bold tracking-widest uppercase">Scanning Stream...</span>
+        </div>
+      </template>
+		</DynamicScroller>
 
 		<MessageInput @send="handleSend" @typing="messenger.sendTyping(true)" @stop-typing="messenger.sendTyping(false)" />
 
@@ -62,8 +66,7 @@ import TypingIndicator from "./TypingIndicator.vue";
 import ImageZoomModal from "./ImageZoomModal.vue";
 
 const messenger = useMessengerStore();
-const bottomAnchor = ref<HTMLDivElement>();
-const messagesEl = ref<HTMLDivElement>();
+const scroller = ref<any>();
 
 const typingUsers = computed(() => (messenger.activeChatId ? messenger.typingUsersFor(messenger.activeChatId) : []));
 
@@ -89,6 +92,32 @@ const groupedMessages = computed(() => {
 	return groups;
 });
 
+const flattenedItems = computed(() => {
+  const items: any[] = [];
+  for (const group of groupedMessages.value) {
+    items.push({
+      id: `date-${group.date}`,
+      type: 'date',
+      date: group.date
+    });
+    group.messages.forEach((msg, mIdx) => {
+      items.push({
+        id: msg.uuid,
+        type: 'message',
+        message: msg,
+        showAvatar: shouldShowAvatar(group.messages, mIdx)
+      });
+    });
+  }
+  if (typingUsers.value.length > 0) {
+    items.push({
+      id: 'typing-indicator',
+      type: 'typing'
+    });
+  }
+  return items;
+});
+
 function formatDate(d: Date): string {
 	const now = new Date();
 	const diff = now.getTime() - d.getTime();
@@ -97,10 +126,10 @@ function formatDate(d: Date): string {
 	return d.toLocaleDateString("en", { month: "short", day: "numeric" });
 }
 
-function scrollToBottom(instant = false) {
+function scrollToBottom() {
 	nextTick(() => {
-		if (bottomAnchor.value) {
-			bottomAnchor.value.scrollIntoView({ behavior: instant ? "instant" : "smooth" });
+		if (scroller.value) {
+			scroller.value.scrollToBottom();
 		}
 	});
 }
@@ -110,11 +139,12 @@ let lastFetchedOldestUuid: string | null = null;
 
 // Load older messages on scroll to top
 async function onScroll() {
-	if (!messagesEl.value || messenger.messagesLoading || allLoaded.value) return;
+  const el = scroller.value?.$el;
+	if (!el || messenger.messagesLoading || allLoaded.value) return;
 	
-	if (messagesEl.value.scrollHeight <= messagesEl.value.clientHeight) return;
+	if (el.scrollHeight <= el.clientHeight) return;
 
-	if (messagesEl.value.scrollTop < 60 && messenger.activeMessages.length > 0) {
+	if (el.scrollTop < 60 && messenger.activeMessages.length > 0) {
 		const oldestUuid = messenger.activeMessages[0]?.uuid;
 		if (oldestUuid && messenger.activeChatId && oldestUuid !== lastFetchedOldestUuid) {
 			lastFetchedOldestUuid = oldestUuid;
@@ -135,7 +165,7 @@ watch(() => messenger.activeChatId, () => {
 watch(
 	() => messenger.activeChatId,
 	(v) => {
-		if (v) scrollToBottom(true);
+		if (v) scrollToBottom();
 	},
 	{ immediate: true },
 );

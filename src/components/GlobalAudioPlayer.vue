@@ -1,3 +1,33 @@
+<script setup lang="ts">
+import { useAudioStore } from '@/stores/audioStore'
+
+const audioStore = useAudioStore()
+
+function togglePlay() {
+  if (audioStore.isPlaying) {
+    audioStore.pause()
+  } else {
+    audioStore.resume()
+  }
+}
+
+function toggleRate() {
+  const rates = [1, 1.5, 2]
+  const currentRate = Number(audioStore.playbackRate) || 1
+  const currentIndex = rates.indexOf(currentRate)
+  const nextIndex = (currentIndex + 1) % rates.length
+  audioStore.setPlaybackRate(rates[nextIndex])
+}
+
+function seek(e: MouseEvent) {
+  const el = e.currentTarget as HTMLElement
+  const rect = el.getBoundingClientRect()
+  const x = e.clientX - rect.left
+  const pct = x / rect.width
+  audioStore.seekPercent(pct)
+}
+</script>
+
 <template>
   <Transition
     enter-active-class="transition duration-300 ease-out"
@@ -49,6 +79,15 @@
 
         <!-- Right Controls -->
         <div class="flex items-center gap-2">
+          <!-- Playback Speed -->
+          <button 
+            @click="toggleRate"
+            class="px-2 py-1 text-[10px] font-mono font-bold rounded-lg bg-white/5 border border-white/10 text-text-dim hover:text-ember hover:border-ember/30 transition-all min-w-[36px]"
+            :title="`Current Speed: ${audioStore.playbackRate}x`"
+          >
+            {{ audioStore.playbackRate }}x
+          </button>
+
           <button 
             @click="audioStore.stop"
             class="p-2 text-text-dim hover:text-ember transition-colors"
@@ -63,25 +102,3 @@
     </div>
   </Transition>
 </template>
-
-<script setup lang="ts">
-import { useAudioStore } from '@/stores/audioStore'
-
-const audioStore = useAudioStore()
-
-function togglePlay() {
-  if (audioStore.isPlaying) {
-    audioStore.pause()
-  } else {
-    audioStore.resume()
-  }
-}
-
-function seek(e: MouseEvent) {
-  const el = e.currentTarget as HTMLElement
-  const rect = el.getBoundingClientRect()
-  const x = e.clientX - rect.left
-  const pct = x / rect.width
-  audioStore.seekPercent(pct)
-}
-</script>

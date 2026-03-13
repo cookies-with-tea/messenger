@@ -67,34 +67,46 @@ const confirmLogout = () => {
     <NewChatModal :open="modalOpen" @close="modalOpen = false" />
 
     <!-- Search & Quick Actions -->
-    <div class="px-3 sm:px-4 py-3 sm:py-4 border-b border-white/5">
-      <div class="relative group">
+    <div class="px-3 sm:px-4 py-3 sm:py-4 border-b border-white/5 flex gap-2">
+      <div class="relative group flex-1">
         <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted group-focus-within:text-pulse transition-colors" viewBox="0 0 20 20" fill="currentColor">
-          <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd"/>
+          <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9z" clip-rule="evenodd"/>
         </svg>
         <input
           v-model="search"
           type="text"
-          placeholder="Search..."
+          placeholder="Filter chats..."
           class="w-full bg-white/3 border border-white/5 rounded-xl py-2 pl-9 pr-3 text-xs sm:text-sm text-text-base placeholder:text-muted outline-none focus:border-pulse/40 focus:bg-white/6 transition-all font-mono"
         />
       </div>
+      <button 
+        @click="messenger.isGlobalSearchModalOpen = true"
+        class="p-2 rounded-xl glass border border-white/5 text-text-dim hover:text-pulse hover:border-pulse/30 transition-all flex items-center justify-center"
+        title="Global Message Search"
+      >
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          <line x1="11" y1="8" x2="11" y2="14"></line>
+          <line x1="8" y1="11" x2="14" y2="11"></line>
+        </svg>
+      </button>
     </div>
 
     <!-- Folders Tab Bar -->
     <div class="flex items-center gap-1 px-2 py-1.5 border-b border-white/5 bg-white/1 overflow-x-auto no-scrollbar">
       <button
-        v-for="folder in folders"
-        :key="folder.id"
-        @click="messenger.setFolder(folder.id)"
+        v-for="f in folders"
+        :key="f.id"
+        @click="messenger.setFolder(f.id)"
         class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-mono font-black uppercase tracking-wider transition-all whitespace-nowrap border"
-        :class="messenger.activeFolder === folder.id 
+        :class="messenger.activeFolder === f.id 
           ? 'bg-pulse/10 text-pulse border-pulse/30 shadow-[0_0_15px_rgba(var(--color-pulse),0.1)]' 
           : 'text-text-dim border-transparent hover:text-text-bright hover:bg-white/5'"
       >
-        <span class="text-xs">{{ folder.icon }}</span>
-        <span>{{ folder.label }}</span>
-        <span v-if="folder.id === 'unread' && (messenger.chats || []).reduce((acc: number, c: any) => acc + (c?.unread_count || 0), 0) > 0" 
+        <span class="text-xs">{{ f.icon }}</span>
+        <span>{{ f.label }}</span>
+        <span v-if="f.id === 'unread' && (messenger.chats || []).reduce((acc: number, c: any) => acc + (c?.unread_count || 0), 0) > 0" 
               class="w-1.5 h-1.5 rounded-full bg-pulse animate-pulse"></span>
       </button>
     </div>

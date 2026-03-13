@@ -6,6 +6,7 @@ import type {
 	MessageResponseDTO,
 	UserResponseDTO,
 	ChatMediaCountsDTO,
+	MessageReceiptDTO,
 } from "@/types";
 
 import { useToastStore } from "@/stores/toastStore";
@@ -138,8 +139,14 @@ export const messageApi = {
 
 	getByUuid: (chatUuid: string) => get<ApiResponse<MessageResponseDTO>>(`/api/v1/chats/${chatUuid}`),
 
+	getMessageReceipts: (chatUuid: string, msgUuid: string) =>
+		get<ApiResponse<MessageReceiptDTO[]>>(`/api/v1/chats/${chatUuid}/messages/${msgUuid}/receipts`),
+
 	search: (chatUuid: string, q: string, limit = 50) =>
 		get<ApiResponse<MessageResponseDTO[]>>(`/api/v1/chats/${chatUuid}/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+
+	globalSearch: (q: string, limit = 50) =>
+		get<ApiResponse<MessageResponseDTO[]>>(`/api/v1/chats/search?q=${encodeURIComponent(q)}&limit=${limit}`),
 };
 
 // ─── WebSocket URL builder ─────────────────────────────────────────

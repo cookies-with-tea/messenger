@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 
 export interface AudioMedia {
   uuid: string
@@ -13,6 +13,7 @@ export const useAudioStore = defineStore('audio', () => {
   const isPlaying = ref(false)
   const currentTime = ref(0)
   const duration = ref(0)
+  const playbackRate = ref(Number(localStorage.getItem('audio_playback_rate')) || 1)
 
   // Sync state with shared media player
   audio.onplay = () => { isPlaying.value = true }
@@ -27,6 +28,7 @@ export const useAudioStore = defineStore('audio', () => {
   }
   audio.onloadedmetadata = () => {
     duration.value = audio.duration
+    audio.playbackRate = playbackRate.value
   }
 
   function formatTime(s: number) {
@@ -44,15 +46,23 @@ export const useAudioStore = defineStore('audio', () => {
     return (currentTime.value / duration.value) * 100
   })
 
+  function setPlaybackRate(rate: number) {
+    playbackRate.value = rate
+    audio.playbackRate = rate
+    localStorage.setItem('audio_playback_rate', String(rate))
+  }
+
   function play(media: AudioMedia) {
     if (currentAudio.value?.uuid === media.uuid) {
       if (!isPlaying.value) {
+        audio.playbackRate = playbackRate.value
         audio.play().catch(console.error)
       }
     } else {
       stop()
       currentAudio.value = media
       audio.src = media.url
+      audio.playbackRate = playbackRate.value
       audio.play().catch(console.error)
     }
   }
@@ -63,6 +73,7 @@ export const useAudioStore = defineStore('audio', () => {
 
   function resume() {
     if (currentAudio.value) {
+      audio.playbackRate = playbackRate.value
       audio.play().catch(console.error)
     }
   }
@@ -91,6 +102,7 @@ export const useAudioStore = defineStore('audio', () => {
     isPlaying,
     currentTime,
     duration,
+    playbackRate,
     progress,
     currentFormattedTime,
     totalFormattedTime,
@@ -99,6 +111,7 @@ export const useAudioStore = defineStore('audio', () => {
     resume,
     stop,
     seek,
-    seekPercent
+    seekPercent,
+    setPlaybackRate
   }
 })
