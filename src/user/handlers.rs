@@ -369,7 +369,9 @@ async fn get_one(
                 last_name: user.last_name,
                 phone: user.phone,
                 email: user.email,
-                avatar: user.avatar,
+                avatar: user
+                    .avatar_uuid
+                    .map(|uuid| format!("{}/media/image/{}.png", state.media_base_url, uuid)),
                 role: user.role,
                 birth_date: user.birth_date,
                 created_at: user.created_at,
@@ -569,6 +571,11 @@ async fn update(
                 query_param_index += 1;
             }
 
+            if let Some(_avatar_uuid) = &payload.avatar_uuid {
+                update_query.push_str(&format!("avatar_uuid = ${}::uuid, ", query_param_index));
+                query_param_index += 1;
+            }
+
             if query_param_index == 1 {
                 let msg = state.i18n.t("user.no_fields_to_update", &locale).await;
                 return into_api_response(
@@ -647,6 +654,11 @@ async fn update(
                 _bind_param_index += 1;
             }
 
+            if let Some(avatar_uuid) = &payload.avatar_uuid {
+                query = query.bind(avatar_uuid);
+                _bind_param_index += 1;
+            }
+
             query = query.bind(uuid);
 
             let result = query.execute(&state.pool).await;
@@ -668,7 +680,9 @@ async fn update(
                                 last_name: user.last_name,
                                 phone: user.phone,
                                 email: user.email,
-                                avatar: user.avatar,
+                                avatar: user.avatar_uuid.map(|uuid| {
+                                    format!("{}/media/image/{}.png", state.media_base_url, uuid)
+                                }),
                                 role: user.role,
                                 birth_date: user.birth_date,
                                 created_at: user.created_at,
@@ -687,7 +701,8 @@ async fn update(
                                 Some(vec![msg]),
                             )
                         }
-                        Err(_) => {
+                        Err(e) => {
+                            eprintln!("[UpdateUser] Failed to fetch updated user: {:?}. UUID: {}", e, uuid);
                             let msg = state.i18n.t("general.db_error", &locale).await;
                             into_api_response(
                                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -698,7 +713,8 @@ async fn update(
                         }
                     }
                 }
-                Err(_) => {
+                Err(e) => {
+                    eprintln!("[UpdateUser] Database error: {:?}. UUID: {}, Payload: {:?}", e, uuid, payload);
                     let msg = state.i18n.t("general.db_error", &locale).await;
                     into_api_response(
                         StatusCode::INTERNAL_SERVER_ERROR,
@@ -718,7 +734,8 @@ async fn update(
                 Some(vec![msg]),
             )
         }
-        Err(_) => {
+        Err(e) => {
+            println!("Error: {:?}", e);
             let msg = state.i18n.t("general.db_error", &locale).await;
             into_api_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -738,6 +755,5 @@ pub fn public_router() -> Router<Arc<AppState>> {
 }
 
 pub fn protected_router() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/{uuid}", axum::routing::delete(delete_one).patch(update))
+    Router::new().route("/{uuid}", axum::routing::delete(delete_one).patch(update))
 }

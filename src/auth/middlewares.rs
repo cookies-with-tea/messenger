@@ -26,12 +26,22 @@ pub async fn auth_middleware(
 
     let token = if let Some(header_value) = auth_header {
         if header_value.starts_with("Bearer ") {
-            &header_value[7..]
+            header_value[7..].to_string()
         } else {
             return Err(create_unauthorized_response(&state, &locale).await);
         }
     } else {
-        return Err(create_unauthorized_response(&state, &locale).await);
+        // Try query param for WebSockets
+        let query = request.uri().query().unwrap_or("");
+        let token_param = query.split('&')
+            .find(|part| part.starts_with("token="))
+            .map(|part| part[6..].to_string());
+        
+        if let Some(t) = token_param {
+            t
+        } else {
+            return Err(create_unauthorized_response(&state, &locale).await);
+        }
     };
 
     let secret = match std::env::var("JWT_SECRET") {
@@ -46,7 +56,7 @@ pub async fn auth_middleware(
 
     use jsonwebtoken::{decode, DecodingKey, Validation};
     let token_data = match decode::<crate::auth::dto::Claims>(
-        token,
+        &token,
         &DecodingKey::from_secret(secret.as_ref()),
         &Validation::default(),
     ) {

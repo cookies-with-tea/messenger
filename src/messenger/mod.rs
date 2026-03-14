@@ -71,9 +71,11 @@
 //! { "event": "error",          "payload": { "message": "..." } }
 //! ```
 
+pub mod application;
+pub mod domain;
 pub mod dto;
-pub mod handlers;
+pub mod infrastructure;
+pub mod presentation;
 pub mod ws;
-pub mod ws_echo;
 
 pub use ws::WsState;

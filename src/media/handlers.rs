@@ -87,10 +87,14 @@ pub async fn create(
 
     let uuid = Uuid::new_v4();
     let path_buf = PathBuf::from(&file_name);
-    let extension = path_buf
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .unwrap_or("bin");
+    let extension = if media_type == "image" {
+        "png"
+    } else {
+        path_buf
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("bin")
+    };
 
     let relative_path = format!("media/{}/{}.{}", media_type, uuid, extension);
     let save_path = PathBuf::from(&relative_path);

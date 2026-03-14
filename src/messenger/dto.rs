@@ -18,7 +18,7 @@ pub struct UserPreviewDTO {
     pub avatar: Option<MediaDTO>,
     pub is_online: bool,
     #[sqlx(default)]
-    pub last_seen_at: DateTime<Utc>,
+    pub last_seen_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, Clone, FromRow)]
@@ -79,6 +79,8 @@ pub struct ChatRow {
     #[sqlx(default)]
     pub sender_last_seen_at: Option<DateTime<Utc>>,
     #[sqlx(default)]
+    pub sender_is_online: bool,
+    #[sqlx(default)]
     pub alias: Option<String>,
 }
 
@@ -106,7 +108,7 @@ pub struct ChatResponseDTO {
     pub alias: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema, Clone)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, Clone, FromRow)]
 pub struct ChatMediaCountsDTO {
     pub images: i64,
     pub videos: i64,
@@ -119,7 +121,7 @@ pub struct CreateChatDTO {
     pub name: Option<String>,
     pub description: Option<String>,
     pub chat_type: ChatType,
-    pub avatar: Option<String>,
+    pub avatar: Option<Uuid>,
     /// UUID других участников (без себя — добавляется автоматически)
     pub member_uuids: Vec<Uuid>,
 }
@@ -159,6 +161,8 @@ pub struct MessageRow {
     pub sender_avatar_uuid: Option<Uuid>, // 👈 UUID (ссылка на media)
     #[sqlx(default)]
     pub sender_last_seen_at: Option<DateTime<Utc>>,
+    #[sqlx(default)]
+    pub sender_is_online: bool,
 
     // Статусы
     #[sqlx(default)]
@@ -168,11 +172,18 @@ pub struct MessageRow {
     #[sqlx(default)]
     pub my_status: Option<DeliveryStatus>,
 
-    // Превью цитаты
     #[sqlx(default)]
     pub reply_body_preview: Option<String>,
 
     pub media_uuid: Option<Uuid>,
+    #[sqlx(default)]
+    pub media_type: Option<String>,
+    #[sqlx(default)]
+    pub media_title: Option<String>,
+    #[sqlx(default)]
+    pub media_alt: Option<String>,
+    #[sqlx(default)]
+    pub media_url: Option<String>,
 }
 
 #[derive(Debug, FromRow)]
@@ -210,7 +221,7 @@ pub struct ChatMemberDTO {
     #[sqlx(default)]
     pub is_online: bool,
     #[sqlx(default)]
-    pub last_seen_at: DateTime<Utc>,
+    pub last_seen_at: Option<Option<DateTime<Utc>>>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -310,7 +321,7 @@ pub enum WsServerEvent {
     Typing { chat_uuid: Uuid, user_uuid: Uuid, is_typing: bool },
     MemberJoined(ChatMemberDTO),
     MemberLeft { chat_uuid: Uuid, user_uuid: Uuid },
-    UserStatusChanged { user_uuid: Uuid, is_online: bool, last_seen_at: DateTime<Utc> },
+    UserStatusChanged { user_uuid: Uuid, is_online: bool, last_seen_at: Option<DateTime<Utc>> },
     Error { message: String },
     
     // ── WebRTC Signaling ──
@@ -340,7 +351,7 @@ pub enum WsClientAction {
     /// is_typing + chat_uuid для глобального канала
     Typing        { chat_uuid: Uuid, is_typing: bool },
     Ping,
-
+ 
     // ── WebRTC Signaling ──
     CallOffer    { chat_uuid: Uuid, sdp: String },
     CallAnswer   { chat_uuid: Uuid, sdp: String },
@@ -348,7 +359,6 @@ pub enum WsClientAction {
     CallReject   { chat_uuid: Uuid },
     CallEnd      { chat_uuid: Uuid },
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct WsQuery {

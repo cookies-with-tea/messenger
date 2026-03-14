@@ -3,7 +3,8 @@ use tokio::sync::{broadcast, RwLock};
 use axum::extract::ws::{Message, WebSocket};
 use futures::{SinkExt, StreamExt};
 use uuid::Uuid;
-use tracing::{error, warn, debug};
+use tracing::{error, warn, debug, info};
+use sqlx::{Pool, Postgres};
 
 use super::dto::WsServerEvent;
 
@@ -204,6 +205,7 @@ pub async fn handle_user_socket<F, Fut>(
     socket: WebSocket,
     user_uuid: Uuid,
     user_ws_state: UserWsState,
+    pool: Pool<Postgres>,
     on_client_msg: F,
 )
 where
@@ -211,6 +213,38 @@ where
     Fut: std::future::Future<Output = ()> + Send,
 {
     let (mut sink, mut stream) = socket.split();
+
+    // ─── 1. Connect logic: Store online status ───
+    // Optimize: only update if user was offline to reduce DB load
+    let _ = sqlx::query("UPDATE guest_user SET is_online = TRUE WHERE uuid = $1 AND is_online = FALSE")
+        .bind(user_uuid)
+        .execute(&pool)
+        .await;
+
+    // Broadcast status change to chat participants
+    let user_ws_state_for_broadcast = user_ws_state.clone();
+    let pool_for_broadcast = pool.clone();
+    tokio::spawn(async move {
+        let participants = sqlx::query_scalar::<_, Uuid>(
+            "SELECT DISTINCT cm2.user_uuid 
+             FROM chat_member cm1
+             JOIN chat_member cm2 ON cm2.chat_uuid = cm1.chat_uuid
+             WHERE cm1.user_uuid = $1 AND cm1.left_at IS NULL AND cm2.left_at IS NULL"
+        )
+        .bind(user_uuid)
+        .fetch_all(&pool_for_broadcast)
+        .await
+        .unwrap_or_default();
+
+        user_ws_state_for_broadcast.broadcast_to_users(
+            &participants, 
+            WsServerEvent::UserStatusChanged { 
+                user_uuid, 
+                is_online: true, 
+                last_seen_at: Some(chrono::Utc::now()) 
+            }
+        ).await;
+    });
 
     // Подписываемся на канал данного пользователя
     let tx = user_ws_state.get_or_create(user_uuid).await;
@@ -262,5 +296,41 @@ where
     }
 
     user_ws_state.cleanup(user_uuid).await;
+    
+    // ─── 2. Disconnect logic: Store offline status ───
+    // Only set to FALSE if NO MORE receivers (all tabs closed)
+    if !user_ws_state.is_online(user_uuid).await {
+        let now = chrono::Utc::now();
+        let _ = sqlx::query("UPDATE guest_user SET is_online = FALSE, last_seen_at = $2 WHERE uuid = $1")
+            .bind(user_uuid)
+            .bind(now)
+            .execute(&pool)
+            .await;
+
+        // Broadcast disconnect
+        let user_ws_state_for_disconnect = user_ws_state.clone();
+        tokio::spawn(async move {
+            let participants = sqlx::query_scalar::<_, Uuid>(
+                "SELECT DISTINCT cm2.user_uuid 
+                 FROM chat_member cm1
+                 JOIN chat_member cm2 ON cm2.chat_uuid = cm1.chat_uuid
+                 WHERE cm1.user_uuid = $1 AND cm1.left_at IS NULL AND cm2.left_at IS NULL"
+            )
+            .bind(user_uuid)
+            .fetch_all(&pool)
+            .await
+            .unwrap_or_default();
+
+            user_ws_state_for_disconnect.broadcast_to_users(
+                &participants, 
+                WsServerEvent::UserStatusChanged { 
+                    user_uuid, 
+                    is_online: false, 
+                    last_seen_at: Some(now) 
+                }
+            ).await;
+        });
+    }
+
     debug!("user_ws disconnected: user={user_uuid}");
 }

@@ -1,25 +1,25 @@
 mod auth;
 mod core;
 mod i18n;
+mod mailer;
 mod media;
 mod messenger;
 mod user;
-mod mailer;
 
 use crate::auth::middlewares::auth_middleware;
 use crate::core::app::AppConfig;
 use crate::core::db::create_pool;
 use crate::i18n::middlewares::locale_middleware;
 use crate::i18n::I18nService;
-use crate::messenger::WsState;
 use crate::messenger::ws::UserWsState;
+use crate::messenger::WsState;
 use axum::Router;
 use axum::{http::HeaderValue, middleware};
+use http::header;
 use sqlx::{Pool, Postgres};
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
-use http::header;
 use tower_http::{
     cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer},
     services::ServeDir,
@@ -45,6 +45,7 @@ struct AppState {
 
     ws_state: Option<WsState>,
     user_ws_state: Option<UserWsState>,
+    media_base_url: String,
 }
 
 #[derive(OpenApi)]
@@ -71,21 +72,25 @@ struct AppState {
         crate::i18n::handlers::get_all,
         crate::i18n::handlers::delete_one,
         crate::i18n::handlers::get_by_dict_key,
-        crate::messenger::handlers::get_chats,
-        crate::messenger::handlers::get_chat,
-        crate::messenger::handlers::create_chat,
-        crate::messenger::handlers::leave_or_delete_chat,
-        crate::messenger::handlers::get_members,
-        crate::messenger::handlers::add_member,
-        crate::messenger::handlers::remove_member,
-        crate::messenger::handlers::get_messages,
-        crate::messenger::handlers::send_message,
-        crate::messenger::handlers::edit_message,
-        crate::messenger::handlers::delete_message,
-        crate::messenger::handlers::mark_delivered,
-        crate::messenger::handlers::mark_read,
-        crate::messenger::handlers::ws_upgrade,
-        crate::messenger::handlers::ws_user_upgrade,
+        crate::messenger::presentation::handlers::chat_handlers::get_chats,
+        crate::messenger::presentation::handlers::chat_handlers::get_chat,
+        crate::messenger::presentation::handlers::chat_handlers::create_chat,
+        crate::messenger::presentation::handlers::chat_handlers::update_chat,
+        crate::messenger::presentation::handlers::chat_handlers::delete_chat,
+        crate::messenger::presentation::handlers::chat_handlers::set_alias,
+        crate::messenger::presentation::handlers::chat_handlers::get_members,
+        crate::messenger::presentation::handlers::chat_handlers::get_media_counts,
+        crate::messenger::presentation::handlers::message_handlers::get_messages,
+        crate::messenger::presentation::handlers::message_handlers::send_message,
+        crate::messenger::presentation::handlers::message_handlers::edit_message,
+        crate::messenger::presentation::handlers::message_handlers::delete_message,
+        crate::messenger::presentation::handlers::message_handlers::mark_delivered,
+        crate::messenger::presentation::handlers::message_handlers::mark_read,
+        crate::messenger::presentation::handlers::message_handlers::search_in_chat,
+        crate::messenger::presentation::handlers::message_handlers::global_search,
+        crate::messenger::presentation::handlers::message_handlers::get_message_receipts,
+        crate::messenger::presentation::handlers::ws_handlers::ws_upgrade,
+        crate::messenger::presentation::handlers::ws_handlers::ws_user_upgrade,
     ),
     components(schemas(
         crate::messenger::dto::ChatResponseDTO,
@@ -101,6 +106,10 @@ struct AppState {
         crate::messenger::dto::WsServerEvent,
         crate::messenger::dto::WsClientAction,
         crate::messenger::dto::MessageQuery,
+        crate::messenger::dto::SearchQuery,
+        crate::messenger::dto::SetAliasDTO,
+        crate::messenger::dto::MessageReceiptDTO,
+        crate::messenger::dto::ChatMediaCountsDTO,
     )),
     modifiers(&SecurityAddon),
     tags(
@@ -144,14 +153,14 @@ async fn main() {
     let app_host = config.app_host.clone();
     let app_port = config.app_port.clone();
 
-    let smtp_host     = env::var("SMTP_HOST").expect("SMTP_HOST must be set");
+    let smtp_host = env::var("SMTP_HOST").expect("SMTP_HOST must be set");
     let smtp_port: u16 = env::var("SMTP_PORT")
         .unwrap_or_else(|_| "587".to_string())
         .parse()
         .expect("Invalid SMTP_PORT");
     let smtp_username = env::var("SMTP_USERNAME").expect("SMTP_USERNAME must be set");
     let smtp_password = env::var("SMTP_PASSWORD").expect("SMTP_PASSWORD must be set");
-    let smtp_from     = env::var("SMTP_FROM").expect("SMTP_FROM must be set");
+    let smtp_from = env::var("SMTP_FROM").expect("SMTP_FROM must be set");
 
     let i18n = I18nService::new(pool.clone());
 
@@ -159,8 +168,7 @@ async fn main() {
         pool: pool.clone(),
         i18n,
 
-        frontend_url: env::var("FRONTEND_URL")
-            .expect("FRONTEND_URL must be set"),
+        frontend_url: env::var("FRONTEND_URL").expect("FRONTEND_URL must be set"),
 
         smtp_host,
         smtp_port,
@@ -170,6 +178,7 @@ async fn main() {
 
         ws_state: Some(WsState::new()),
         user_ws_state: Some(UserWsState::new()),
+        media_base_url: env::var("PUBLIC_URL").unwrap_or_else(|_| "http://localhost:8000".to_string()),
     });
 
     let cors = {
@@ -214,13 +223,10 @@ async fn main() {
     let openapi = ApiDoc::openapi();
 
     let public_router = Router::new()
-        .nest("/api/v1/auth",  auth::handlers::router())
-        .nest("/api/v1/user",  user::handlers::public_router())
-        .nest("/api/v1/i18n",  i18n::handlers::public_router())
+        .nest("/api/v1/auth", auth::handlers::router())
+        .nest("/api/v1/user", user::handlers::public_router())
+        .nest("/api/v1/i18n", i18n::handlers::public_router())
         .nest("/api/v1/media", media::handlers::router())
-        .nest("/ws/chats", messenger::handlers::ws_router())
-        .nest("/ws/user",  messenger::handlers::ws_user_router())
-        .nest("/ws/test",  messenger::ws_echo::echo_router())
         .nest_service(
             "/media",
             ServeDir::new("media").fallback(ServeDir::new("media/image")),
@@ -230,7 +236,9 @@ async fn main() {
     let protected_router = Router::new()
         .nest("/api/v1/user", user::handlers::protected_router())
         .nest("/api/v1/i18n", i18n::handlers::protected_router())
-        .nest("/api/v1/chats", messenger::handlers::router())
+        .nest("/api/v1/chats", messenger::presentation::messenger_router())
+        .nest("/ws/chats", messenger::presentation::ws_router())
+        .nest("/ws/user", messenger::presentation::ws_user_router())
         .with_state(shared_state.clone())
         .layer(middleware::from_fn_with_state(
             shared_state.clone(),
