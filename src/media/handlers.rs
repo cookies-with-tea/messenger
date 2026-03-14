@@ -456,6 +456,19 @@ pub async fn update(
 }
 
 
+/// Удалить один медиа-файл по UUID
+#[utoipa::path(
+    delete,
+    path = "/api/v1/media/{uuid}",
+    params(("uuid" = Uuid, Path, description = "Media UUID")),
+    responses(
+        (status = 200, description = "Media deleted successfully"),
+        (status = 404, description = "Media not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "Media",
+    operation_id = "delete_one_media",
+)]
 pub async fn delete_one(
     State(state): State<Arc<AppState>>,
     Path(uuid): Path<Uuid>,
@@ -512,6 +525,17 @@ pub async fn delete_one(
 }
 
 
+/// Удалить все медиа-файлы (опасно!)
+#[utoipa::path(
+    delete,
+    path = "/api/v1/media",
+    responses(
+        (status = 200, description = "All media deleted successfully"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "Media",
+    operation_id = "delete_all_media",
+)]
 pub async fn delete_all(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ApiResponse<()>>, (StatusCode, Json<ApiResponse<()>>)> {

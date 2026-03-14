@@ -695,6 +695,19 @@ pub async fn create_chat(
 //     }
 // }
 
+/// Выйти из чата или удалить его (если создатель)
+#[utoipa::path(
+    delete,
+    path = "/{chat_uuid}",
+    params(("chat_uuid" = Uuid, Path, description = "Chat UUID")),
+    responses(
+        (status = 200, description = "Success"),
+        (status = 403, description = "Forbidden"),
+    ),
+    tag = "Messenger",
+    security(("bearer_auth" = [])),
+    operation_id = "leave_or_delete_chat",
+)]
 pub async fn leave_or_delete_chat(
     State(state): State<Arc<AppState>>,
     Extension(locale): Extension<String>,
@@ -807,6 +820,20 @@ pub async fn get_members(
     }
 }
 
+/// Добавить участника в чат
+#[utoipa::path(
+    post,
+    path = "/{chat_uuid}/members",
+    params(("chat_uuid" = Uuid, Path, description = "Chat UUID")),
+    request_body = AddMemberDTO,
+    responses(
+        (status = 201, body = ApiResponse<ChatMemberDTO>),
+        (status = 403, body = ApiResponse<ChatMemberDTO>),
+    ),
+    tag = "Messenger",
+    security(("bearer_auth" = [])),
+    operation_id = "add_member",
+)]
 pub async fn add_member(
     State(state): State<Arc<AppState>>,
     Extension(locale): Extension<String>,
@@ -852,6 +879,22 @@ pub async fn add_member(
     }
 }
 
+/// Удалить участника из чата
+#[utoipa::path(
+    delete,
+    path = "/{chat_uuid}/members/{user_uuid}",
+    params(
+        ("chat_uuid" = Uuid, Path, description = "Chat UUID"),
+        ("user_uuid" = Uuid, Path, description = "User UUID to remove")
+    ),
+    responses(
+        (status = 200, description = "Success"),
+        (status = 403, description = "Forbidden"),
+    ),
+    tag = "Messenger",
+    security(("bearer_auth" = [])),
+    operation_id = "remove_member",
+)]
 pub async fn remove_member(
     State(state): State<Arc<AppState>>,
     Extension(locale): Extension<String>,
@@ -1095,6 +1138,23 @@ pub async fn send_message(
     }
 }
 
+/// Редактировать сообщение
+#[utoipa::path(
+    put,
+    path = "/{chat_uuid}/messages/{message_uuid}",
+    params(
+        ("chat_uuid" = Uuid, Path, description = "Chat UUID"),
+        ("message_uuid" = Uuid, Path, description = "Message UUID")
+    ),
+    request_body = UpdateMessageDTO,
+    responses(
+        (status = 200, body = ApiResponse<MessageResponseDTO>),
+        (status = 404, body = ApiResponse<MessageResponseDTO>),
+    ),
+    tag = "Messenger",
+    security(("bearer_auth" = [])),
+    operation_id = "edit_message",
+)]
 pub async fn edit_message(
     State(state): State<Arc<AppState>>,
     Extension(locale): Extension<String>,
@@ -1160,6 +1220,22 @@ pub async fn edit_message(
     }
 }
 
+/// Удалить сообщение
+#[utoipa::path(
+    delete,
+    path = "/{chat_uuid}/messages/{message_uuid}",
+    params(
+        ("chat_uuid" = Uuid, Path, description = "Chat UUID"),
+        ("message_uuid" = Uuid, Path, description = "Message UUID")
+    ),
+    responses(
+        (status = 200, description = "Success"),
+        (status = 404, description = "Not Found"),
+    ),
+    tag = "Messenger",
+    security(("bearer_auth" = [])),
+    operation_id = "delete_message",
+)]
 pub async fn delete_message(
     State(state): State<Arc<AppState>>,
     Extension(locale): Extension<String>,
@@ -1194,6 +1270,18 @@ pub async fn delete_message(
     into_api_response::<()>(StatusCode::OK, None, None, None)
 }
 
+/// Отметить все сообщения в чате как доставленные
+#[utoipa::path(
+    post,
+    path = "/{chat_uuid}/delivered",
+    params(("chat_uuid" = Uuid, Path, description = "Chat UUID")),
+    responses(
+        (status = 200, description = "Success"),
+    ),
+    tag = "Messenger",
+    operation_id = "mark_delivered",
+    security(("bearer_auth" = [])),
+)]
 pub async fn mark_delivered(
     State(state): State<Arc<AppState>>,
     Extension(_locale): Extension<String>,
@@ -1213,6 +1301,19 @@ pub async fn mark_delivered(
     into_api_response::<()>(StatusCode::OK, None, None, None)
 }
 
+/// Отметить все сообщения в чате как прочитанные
+#[utoipa::path(
+    post,
+    path = "/{chat_uuid}/read",
+    params(("chat_uuid" = Uuid, Path, description = "Chat UUID")),
+    responses(
+        (status = 200, description = "Success"),
+        (status = 403, description = "Forbidden"),
+    ),
+    tag = "Messenger",
+    operation_id = "mark_read",
+    security(("bearer_auth" = [])),
+)]
 pub async fn mark_read(
     State(state): State<Arc<AppState>>,
     Extension(locale): Extension<String>,
@@ -1531,6 +1632,19 @@ async fn broadcast_user_status(state: &Arc<AppState>, user_uuid: Uuid, is_online
 }
 
 /// WebSocket upgrade для глобального real-time канала пользователя
+#[utoipa::path(
+    get,
+    path = "/ws/user",
+    params(
+        ("token" = String, Query, description = "Auth token")
+    ),
+    responses(
+        (status = 101, description = "Switching protocols"),
+        (status = 401, description = "Unauthorized"),
+    ),
+    tag = "Messenger",
+    operation_id = "ws_user",
+)]
 pub async fn ws_user_upgrade(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
