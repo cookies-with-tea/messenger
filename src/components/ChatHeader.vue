@@ -114,16 +114,16 @@ const displayName = computed(() => {
 const statusText = computed(() => {
   const typing = store.typingUsersFor(props.chat.uuid)
   if (typing.length > 0) {
-    if (props.chat.chat_type === 'direct') return 'Typing...'
-    return typing.length === 1 ? 'Someone is typing...' : `${typing.length} people are typing...`
+    if (props.chat.chat_type === 'direct') return 'Печатает...'
+    return typing.length === 1 ? 'Кто-то печатает...' : `${typing.length} чел. печатают...`
   }
 
   if (props.chat.chat_type === 'group') {
-    return `${props.chat.member_count ?? '?'} members`
+    return `${props.chat.member_count ?? '?'} участников`
   }
   const sender = props.chat.sender
   if (!sender) return ''
-  return sender.is_online ? 'Online' : formatLastSeen(sender.last_seen_at)
+  return sender.is_online ? 'В сети' : formatLastSeen(sender.last_seen_at)
 })
 
 const statusColorClass = computed(() => {
@@ -184,15 +184,21 @@ function unpinLast() {
   }
 }
 
-function formatLastSeen(ts?: string) {
+function formatLastSeen(ts?: string | null) {
   if (!ts) return ''
   const date = new Date(ts)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
+  if (isNaN(date.getTime()) || date.getFullYear() <= 1970) return ''
   
-  if (diff < 60_000) return 'just now'
-  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`
-  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`
-  return `${date.toLocaleDateString()}`
+  const diff = store.now.getTime() - date.getTime()
+  
+  if (diff < 60_000) return 'только что'
+  if (diff < 3600_000) return `${Math.floor(diff / 60_000)} мин. назад`
+  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)} час. назад`
+  
+  // Format date as DD.MM.YYYY
+  const day = date.getDate().toString().padStart(2, '0')
+  const month = (date.getMonth() + 1).toString().padStart(2, '0')
+  const year = date.getFullYear()
+  return `${day}.${month}.${year}`
 }
 </script>

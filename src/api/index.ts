@@ -10,9 +10,13 @@ import type {
 } from "@/types";
 
 import { useToastStore } from "@/stores/toastStore";
+import { ref } from "vue";
 
 const IS_DEV = import.meta.env.DEV;
 const BASE = IS_DEV ? "" : (import.meta.env.VITE_BASE_URL ?? "http://localhost:8080");
+
+// Reactive token for WebSockets
+const accessToken = ref(localStorage.getItem("access_token"));
 
 function authHeaders(): Record<string, string> {
 	const token = localStorage.getItem("access_token");
@@ -154,13 +158,13 @@ const WS_BASE = import.meta.env.VITE_BASE_WS_URL ?? "ws://localhost:8000";
 
 /** Per-chat WebSocket (старый, для совместимости) */
 export function wsUrl(chatUuid: string): string {
-  const token = localStorage.getItem("access_token") ?? ""
+  const token = accessToken.value ?? "";
   return `${WS_BASE}/ws/chats/${chatUuid}?token=${token}`
 }
 
 /** Глобальный WebSocket — один канал на пользователя, все чаты */
 export function wsUserUrl(): string {
-  const token = localStorage.getItem("access_token") ?? ""
+  const token = accessToken.value ?? "";
   return `${WS_BASE}/ws/user?token=${token}`
 }
 
@@ -228,12 +232,14 @@ export const tokenStore = {
 		localStorage.setItem("refresh_token", data.refresh_token);
 		localStorage.setItem("access_expires_in", String(Date.now() + data.access_expires_in * 1000));
 		localStorage.setItem("refresh_expires_in", String(Date.now() + data.refresh_expires_in * 1000));
+		accessToken.value = data.access_token;
 	},
 	clear() {
 		localStorage.removeItem("access_token");
 		localStorage.removeItem("refresh_token");
 		localStorage.removeItem("access_expires_in");
 		localStorage.removeItem("refresh_expires_in");
+		accessToken.value = null;
 	},
 	isLoggedIn(): boolean {
 		const exp = localStorage.getItem("access_expires_in");

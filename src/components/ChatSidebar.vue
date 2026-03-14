@@ -10,10 +10,10 @@ const messenger = useMessengerStore()
 const router = useRouter()
 
 const folders = [
-  { id: 'all', label: 'All', icon: '📡' },
-  { id: 'unread', label: 'Unread', icon: '🔔' },
-  { id: 'groups', label: 'Groups', icon: '👥' },
-  { id: 'archived', label: 'Archive', icon: '📦' }
+  { id: 'all', label: 'Все', icon: '📡' },
+  { id: 'unread', label: 'Непрочитанные', icon: '🔔' },
+  { id: 'groups', label: 'Группы', icon: '👥' },
+  { id: 'archived', label: 'Архив', icon: '📦' }
 ] as const
 
 const modalOpen = ref(false)
@@ -150,7 +150,7 @@ const confirmLogout = () => {
         <div class="flex-1 min-w-0">
           <div class="text-[8px] sm:text-[9px] font-mono text-muted uppercase tracking-wider mb-0.5">Host</div>
           <div class="text-[11px] sm:text-xs font-mono text-text-bright truncate font-bold uppercase tracking-tight">
-            {{ messenger.currentUserProfile ? `${messenger.currentUserProfile.first_name || ''} ${messenger.currentUserProfile.second_name || ''}`.trim() : 'Scanning...' }}
+            {{ messenger.currentUserProfile ? `${messenger.currentUserProfile.first_name || ''} ${messenger.currentUserProfile.second_name || ''}`.trim() : (messenger.currentUserProfileLoading ? 'Loading...' : 'Scanning...') }}
           </div>
         </div>
 

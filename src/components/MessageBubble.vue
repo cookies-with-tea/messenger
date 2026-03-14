@@ -7,6 +7,7 @@ import { useMessengerStore } from '@/stores/messengerStore'
 import type { MessageResponseDTO } from '@/types'
 import ChatAvatar from './ChatAvatar.vue'
 import VoiceMessage from './VoiceMessage.vue'
+import AppImage from './ui/AppImage.vue'
 import ContextMenu from './ui/ContextMenu.vue'
 import ReadReceiptsModal from './ReadReceiptsModal.vue'
 
@@ -216,7 +217,11 @@ const statusClass = computed(() => ({
              class="mb-1 rounded-lg overflow-hidden glass-heavy border border-white/10 cursor-zoom-in group/img relative"
              @click="emit('image-click', message.media.url)"
         >
-          <img :src="message.media.url" class="max-w-full max-h-[300px] object-contain block transition-transform group-hover/img:scale-[1.02]" :alt="message.body" />
+          <AppImage 
+            :src="message.media.url" 
+            class-name="max-w-full max-h-[300px] object-contain block transition-transform group-hover/img:scale-[1.02]" 
+            :alt="message.body" 
+          />
           <div class="absolute inset-0 bg-void/0 group-hover/img:bg-void/10 transition-colors flex items-center justify-center">
              <svg class="w-8 h-8 text-white opacity-0 group-hover/img:opacity-50 transition-opacity" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M5 8a1 1 0 011-1h1V6a1 1 0 012 0v1h1a1 1 0 110 2H9v1a1 1 0 11-2 0V9H6a1 1 0 01-1-1z" />
@@ -238,7 +243,7 @@ const statusClass = computed(() => ({
 
         <div 
           v-if="!message.media || message.media.media_type !== 'audio'" 
-          class="text-xs sm:text-sm leading-relaxed wrap-break-word whitespace-pre-wrap font-mono prose prose-invert prose-xs max-w-none" 
+          class="text-xs sm:text-sm leading-relaxed wrap-break-word font-mono prose prose-invert prose-xs max-w-none" 
           :class="textClass"
           v-html="renderedBody"
         ></div>

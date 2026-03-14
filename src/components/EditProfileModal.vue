@@ -1,6 +1,109 @@
+<script setup lang="ts">
+import { ref, reactive, watch } from 'vue';
+import { storeToRefs } from 'pinia';
+import { useMessengerStore } from '@/stores/messengerStore';
+import { useSettingsStore, accentColors } from '@/stores/settingsStore';
+import { useToastStore } from '@/stores/toastStore';
+import { requestNotificationPermission } from '@/api/notifications';
+import { mediaApi } from '@/api';
+
+const props = defineProps<{
+  isOpen: boolean;
+  user: any;
+}>();
+
+const emit = defineEmits(['close']);
+const messengerStore = useMessengerStore();
+const settingsStore = useSettingsStore();
+const { notificationsEnabled, soundsEnabled, accentColor } = storeToRefs(settingsStore);
+const loading = ref(false);
+
+const form = reactive<{
+  first_name: string;
+  last_name: string;
+  phone: string;
+  city: string;
+  street: string;
+  avatar: string;
+  avatar_uuid: string | null;
+}>({
+  first_name: '',
+  last_name: '',
+  phone: '',
+  city: '',
+  street: '',
+  avatar: '',
+  avatar_uuid: null,
+});
+
+watch(() => props.isOpen, (val) => {
+  if (val && props.user) {
+    form.first_name = props.user.first_name || '';
+    form.last_name = props.user.last_name || '';
+    form.phone = props.user.phone || '';
+    form.city = props.user.city || '';
+    form.street = props.user.street || '';
+    form.avatar = props.user.avatar || '';
+    form.avatar_uuid = props.user.avatar_uuid || null;
+  }
+}, { immediate: true });
+
+function close() {
+  emit('close');
+}
+
+async function handleAvatarUpload(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+
+  try {
+    loading.value = true;
+    const res = await mediaApi.upload(file);
+    if (res.data?.url) {
+      form.avatar = res.data.url;
+      form.avatar_uuid = res.data.uuid;
+    }
+  } catch (e) {
+    console.error('Failed to upload avatar:', e);
+  } finally {
+    loading.value = false;
+  }
+}
+
+const toast = useToastStore();
+
+async function handleSave() {
+  loading.value = true;
+  try {
+    const payload = { ...form };
+    // Safety check: Ensure avatar_uuid is null if it's an empty string or nullish
+    if (!payload.avatar_uuid || payload.avatar_uuid === '') {
+      payload.avatar_uuid = null;
+    }
+    await messengerStore.updateProfile(payload);
+    toast.success('Profile updated successfully!');
+    close();
+  } catch (e) {
+    // Error is already handled by api/index.ts via toast
+    console.error('Failed to save profile:', e);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function toggleNotifications() {
+  if (!settingsStore.notificationsEnabled) {
+    const granted = await requestNotificationPermission();
+    if (granted) settingsStore.setNotifications(true);
+  } else {
+    settingsStore.setNotifications(false);
+  }
+}
+</script>
+
 <template>
   <Transition name="modal">
-    <div v-if="isOpen" class="modal-overlay" @click.self="close">
+    <div v-if="props.isOpen" class="modal-overlay" @click.self="close">
       <div class="modal-content glass">
         <div class="modal-header">
           <h3>Edit Profile</h3>
@@ -35,7 +138,7 @@
             </div>
             <div class="form-group full-width">
               <label>Email (Cannot be changed)</label>
-              <input :value="user?.email" type="email" disabled class="glass-input disabled" />
+              <input :value="props.user?.email" type="email" disabled class="glass-input disabled" />
             </div>
             <div class="form-group">
               <label>Phone</label>
@@ -51,7 +154,6 @@
             </div>
           </div>
 
-          <!-- New: Theme & Notifications Section -->
           <div class="settings-section">
             <h4 class="section-title">App Settings</h4>
             
@@ -63,9 +165,9 @@
                   :key="key" 
                   type="button"
                   class="theme-btn"
-                  :class="{ active: settings.accentColor === key }"
+                  :class="{ active: accentColor === key }"
                   :style="{ '--btn-color': color.pulse }"
-                  @click="settings.setAccentColor(key)"
+                  @click="settingsStore.setAccentColor(key)"
                 >
                   <div class="color-dot"></div>
                   <span>{{ color.label }}</span>
@@ -79,19 +181,19 @@
                   <label>Desktop Notifications</label>
                   <p class="toggle-hint">Get alerts when you're in another tab</p>
                 </div>
-                <div class="toggle-switch" :class="{ enabled: settings.notificationsEnabled }">
+                <div class="toggle-switch" :class="{ enabled: notificationsEnabled }">
                   <div class="toggle-handle"></div>
                 </div>
               </div>
             </div>
 
             <div class="form-group full-width">
-              <div class="toggle-container" @click="settings.setSounds(!settings.soundsEnabled)">
+              <div class="toggle-container" @click="settingsStore.setSounds(!soundsEnabled)">
                 <div class="toggle-info">
                   <label>Sound Effects</label>
                   <p class="toggle-hint">Procedural blips for interface events</p>
                 </div>
-                <div class="toggle-switch" :class="{ enabled: settings.soundsEnabled }">
+                <div class="toggle-switch" :class="{ enabled: soundsEnabled }">
                   <div class="toggle-handle"></div>
                 </div>
               </div>
@@ -110,91 +212,6 @@
     </div>
   </Transition>
 </template>
-
-<script setup lang="ts">
-import { ref, reactive, watch } from 'vue';
-import { useMessengerStore } from '@/stores/messengerStore';
-import { useSettingsStore, accentColors } from '@/stores/settingsStore';
-import { useToastStore } from '@/stores/toastStore';
-import { requestNotificationPermission } from '@/api/notifications';
-import { mediaApi } from '@/api';
-
-const props = defineProps<{
-  isOpen: boolean;
-  user: any;
-}>();
-
-const emit = defineEmits(['close']);
-const store = useMessengerStore();
-const settings = useSettingsStore();
-const loading = ref(false);
-
-const form = reactive({
-  first_name: '',
-  last_name: '',
-  phone: '',
-  city: '',
-  street: '',
-  avatar: '',
-});
-
-watch(() => props.isOpen, (val) => {
-  if (val && props.user) {
-    form.first_name = props.user.first_name || '';
-    form.last_name = props.user.last_name || '';
-    form.phone = props.user.phone || '';
-    form.city = props.user.city || '';
-    form.street = props.user.street || '';
-    form.avatar = props.user.avatar || '';
-  }
-}, { immediate: true });
-
-function close() {
-  emit('close');
-}
-
-async function handleAvatarUpload(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0];
-  if (!file) return;
-
-  try {
-    loading.value = true;
-    const res = await mediaApi.upload(file);
-    if (res.data?.url) {
-      form.avatar = res.data.url;
-    }
-  } catch (e) {
-    console.error('Failed to upload avatar:', e);
-  } finally {
-    loading.value = false;
-  }
-}
-
-const toast = useToastStore();
-
-async function handleSave() {
-  loading.value = true;
-  try {
-    await store.updateProfile({ ...form });
-    toast.success('Profile updated successfully!');
-    close();
-  } catch (e) {
-    // Error is already handled by api/index.ts via toast
-    console.error('Failed to save profile:', e);
-  } finally {
-    loading.value = false;
-  }
-}
-
-async function toggleNotifications() {
-  if (!settings.notificationsEnabled) {
-    const granted = await requestNotificationPermission();
-    if (granted) settings.setNotifications(true);
-  } else {
-    settings.setNotifications(false);
-  }
-}
-</script>
 
 <style scoped>
 .modal-overlay {
@@ -394,7 +411,6 @@ async function toggleNotifications() {
   cursor: not-allowed;
 }
 
-/* Modal animation */
 .modal-enter-active,
 .modal-leave-active {
   transition: all 0.3s ease;
@@ -406,7 +422,6 @@ async function toggleNotifications() {
   transform: scale(0.9);
 }
 
-/* Settings Styles */
 .settings-section {
   margin-top: 32px;
   padding-top: 24px;

@@ -4,9 +4,14 @@
       class="flex items-center justify-center rounded-full bg-elevated border border-border shrink-0 select-none overflow-hidden"
       :style="{ width: `${size}px`, height: `${size}px`, fontSize: `${size * 0.4}px` }"
     >
-      <template v-if="avatarUrl">
-        <img :src="avatarUrl" :alt="avatarAlt" :title="avatarTitle" class="w-full h-full object-cover" />
-      </template>
+      <AppImage
+        v-if="avatarUrl"
+        :src="avatarUrl"
+        :alt="avatarAlt"
+        :initials="initials"
+        :size="size"
+        class-name="w-full h-full"
+      />
       <span v-else class="font-semibold">{{ initials }}</span>
     </div>
     
@@ -21,6 +26,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import AppImage from './ui/AppImage.vue'
 import type { ChatResponseDTO, UserPreviewDTO } from '@/types'
 
 const props = defineProps<{ 

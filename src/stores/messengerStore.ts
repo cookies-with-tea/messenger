@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
-import { ref, computed, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useWebSocket } from "@vueuse/core";
-import type { ChatResponseDTO, ChatMemberDTO, MessageResponseDTO, UserResponseDTO, DeliveryStatus, WsServerEvent, ChatMediaCountsDTO } from "@/types";
+import type { ChatResponseDTO, ChatMemberDTO, MessageResponseDTO, UserResponseDTO, DeliveryStatus, ChatMediaCountsDTO } from "@/types";
 import { chatApi, messageApi, mediaApi, userApi, wsUserUrl, tokenStore } from "@/api";
 import { showNotification } from "@/api/notifications";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -29,6 +29,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 
 	const chats = ref<ChatResponseDTO[]>([]);
 	const currentUserProfile = ref<UserResponseDTO | null>(null);
+	const currentUserProfileLoading = ref(false);
 	const chatsLoading = ref(false);
 
 	const messages = ref<Map<string, MessageResponseDTO[]>>(new Map());
@@ -49,6 +50,16 @@ export const useMessengerStore = defineStore("messenger", () => {
 
 	const pinnedChatUuids = ref<Set<string>>(new Set(_storedPinned))
 	const archivedChatUuids = ref<Set<string>>(new Set(_storedArchived))
+	const now = ref(new Date());
+
+	// Update 'now' every 60s for last-seen reactivity
+	let nowTimer: any = null;
+	function startNowTimer() {
+		if (nowTimer) clearInterval(nowTimer);
+		nowTimer = setInterval(() => {
+			now.value = new Date();
+		}, 60000);
+	}
 
 	// Edition & Reply State
 	const replyingToMessage = ref<MessageResponseDTO | null>(null);
@@ -157,16 +168,20 @@ export const useMessengerStore = defineStore("messenger", () => {
 	function handleWsMessage(event: string) {
 		console.debug("[WS:Incoming]", event);
 		try {
-			const ev: WsServerEvent = JSON.parse(event);
-			console.debug("[WS:ParsedEvent]", ev.event, ev);
+			const evData = JSON.parse(event) as any;
+			console.debug("[WS:ParsedEvent]", evData.event, evData);
 
-			switch (ev.event) {
-				case "new_message": {
-					const msg = ev.payload;
+			const eventType = evData.event;
+			const payload = evData.payload;
+
+			// Handle both prefixed and non-prefixed (global) events
+			switch (eventType) {
+				case "new_message":
+				case "NewMessage": {
+					const msg = payload;
 					_appendMessage(msg);
 					_bumpChat(msg.chat_uuid, msg.body, msg.created_at);
 					
-					// Авто-подтверждение получения/прочтения (только если не мы отправители)
 					if (msg.sender_uuid !== currentUserId.value) {
 						if (msg.chat_uuid === activeChatId.value) {
 							markRead(msg.chat_uuid);
@@ -174,7 +189,6 @@ export const useMessengerStore = defineStore("messenger", () => {
 							markDelivered(msg.chat_uuid);
 						}
 
-						// Desktop Notification
 						const settings = useSettingsStore();
 						if (settings.notificationsEnabled) {
 							const chat = chats.value.find(c => c.uuid === msg.chat_uuid);
@@ -188,25 +202,30 @@ export const useMessengerStore = defineStore("messenger", () => {
 				}
 
 				case "message_edited":
-					_replaceMessage(ev.payload);
+				case "MessageEdited":
+					_replaceMessage(payload);
 					break;
 
 				case "message_deleted":
-					_removeMessage(ev.payload.chat_uuid, ev.payload.uuid);
+				case "MessageDeleted":
+					_removeMessage(payload.chat_uuid, payload.uuid);
 					break;
 
 				case "status_updated":
-					_applyStatus(ev.payload.chat_uuid, ev.payload.user_uuid, ev.payload.status);
+				case "StatusUpdated":
+					_applyStatus(payload.chat_uuid, payload.user_uuid, payload.status);
 					break;
 
-				case "message_pinned": {
-					const { chat_uuid, uuid, is_pinned } = ev.payload;
+				case "message_pinned":
+				case "MessagePinned": {
+					const { chat_uuid, uuid, is_pinned } = payload;
 					_updatePinnedStatus(chat_uuid, uuid, is_pinned);
 					break;
 				}
 
-				case "typing": {
-					const { chat_uuid, user_uuid, is_typing } = ev.payload;
+				case "typing":
+				case "Typing": {
+					const { chat_uuid, user_uuid, is_typing } = payload;
 					if (user_uuid === currentUserId.value) return;
 					const set = typingMap.value.get(chat_uuid) ?? new Set();
 					is_typing ? set.add(user_uuid) : set.delete(user_uuid);
@@ -214,14 +233,16 @@ export const useMessengerStore = defineStore("messenger", () => {
 					break;
 				}
 
-				case "user_status_changed": {
-					const { user_uuid, is_online, last_seen_at } = ev.payload;
+				case "user_status_changed":
+				case "UserStatusChanged": {
+					const { user_uuid, is_online, last_seen_at } = payload;
 					_updateUserStatus(user_uuid, is_online, last_seen_at);
 					break;
 				}
 
-				case "message_reaction_updated": {
-					const { chat_uuid, message_uuid, user_uuid, emoji, is_added } = ev.payload;
+				case "message_reaction_updated":
+				case "MessageReactionUpdated": {
+					const { chat_uuid, message_uuid, user_uuid, emoji, is_added } = payload;
 					_updateReaction(chat_uuid, message_uuid, user_uuid, emoji, is_added);
 					break;
 				}
@@ -230,41 +251,41 @@ export const useMessengerStore = defineStore("messenger", () => {
 				case "call_offer": {
 					import("./callStore").then(({ useCallStore }) => {
 						// @ts-ignore
-						useCallStore().receiveOffer(ev.payload.chat_uuid, ev.payload.caller_uuid, ev.payload.sdp);
+						useCallStore().receiveOffer(payload.chat_uuid, payload.caller_uuid, payload.sdp);
 					});
 					break;
 				}
 				case "call_answer": {
 					import("./callStore").then(({ useCallStore }) => {
 						// @ts-ignore
-						useCallStore().receiveAnswer(ev.payload.chat_uuid, ev.payload.responder_uuid, ev.payload.sdp);
+						useCallStore().receiveAnswer(payload.chat_uuid, payload.responder_uuid, payload.sdp);
 					});
 					break;
 				}
 				case "ice_candidate": {
 					import("./callStore").then(({ useCallStore }) => {
 						// @ts-ignore
-						useCallStore().receiveIceCandidate(ev.payload.chat_uuid, ev.payload.candidate, ev.payload.sdp_mid, ev.payload.sdp_m_line_index);
+						useCallStore().receiveIceCandidate(payload.chat_uuid, payload.candidate, payload.sdp_mid, payload.sdp_m_line_index);
 					});
 					break;
 				}
 				case "call_reject": {
 					import("./callStore").then(({ useCallStore }) => {
 						// @ts-ignore
-						useCallStore().handleRemoteCallReject(ev.payload.chat_uuid);
+						useCallStore().handleRemoteCallReject(payload.chat_uuid);
 					});
 					break;
 				}
 				case "call_end": {
 					import("./callStore").then(({ useCallStore }) => {
 						// @ts-ignore
-						useCallStore().handleRemoteCallEnd(ev.payload.chat_uuid);
+						useCallStore().handleRemoteCallEnd(payload.chat_uuid);
 					});
 					break;
 				}
 
 				case "error":
-					console.error("[WS Error]", ev.payload.message);
+					console.error("[WS Error]", evData.payload.message);
 					break;
 
 				case "pong":
@@ -272,7 +293,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 					break;
 
 				default:
-					console.warn("[WS] Unknown event:", (ev as any).event);
+					console.warn("[WS] Unknown event:", (evData as any).event);
 			}
 		} catch (e) {
 			console.error("[WS] Failed to parse message:", e);
@@ -290,6 +311,15 @@ export const useMessengerStore = defineStore("messenger", () => {
 	if (tokenStore.isLoggedIn()) {
 		fetchCurrentUser();
 	}
+
+	// Reload profile if user ID changes (e.g. after login/switching accounts)
+	watch(currentUserId, (newId) => {
+		if (newId) {
+			fetchCurrentUser();
+		} else {
+			currentUserProfile.value = null;
+		}
+	});
 
 	// ─── Init WS (вызывать после логина) ─────────────────────────────
 	function initWs() {
@@ -316,12 +346,19 @@ export const useMessengerStore = defineStore("messenger", () => {
 	}
 
 	async function fetchCurrentUser() {
-		if (!currentUserId.value) return;
+		if (!currentUserId.value) {
+			console.warn("[MessengerStore] Cannot fetch current user: currentUserId is empty");
+			return;
+		}
+		currentUserProfileLoading.value = true;
 		try {
+			console.debug("[MessengerStore] Fetching current user profile for:", currentUserId.value);
 			const res = await userApi.get(currentUserId.value);
 			currentUserProfile.value = res.data;
 		} catch (e) {
 			console.error("[Store] Failed to fetch current user profile:", e);
+		} finally {
+			currentUserProfileLoading.value = false;
 		}
 	}
 
@@ -404,7 +441,9 @@ export const useMessengerStore = defineStore("messenger", () => {
 		messagesLoading.value = true;
 		try {
 			const res = await messageApi.list(chatUuid, { limit: 50, before_uuid: beforeUuid });
-			const incoming = res.data?.items ?? [];
+			// Backend returns DESC (newest first), we want ASC (oldest first) in store for easy appending
+			const incoming = (res.data?.items ?? []).reverse();
+			
 			if (beforeUuid) {
 				const existing = messages.value.get(chatUuid) ?? [];
 				messages.value.set(chatUuid, [...incoming, ...existing]);
@@ -613,6 +652,12 @@ export const useMessengerStore = defineStore("messenger", () => {
 				}
 			});
 		});
+
+		// 4. Обновляем selectedProfile (если открыт)
+		if (selectedProfile.value && selectedProfile.value.uuid === userUuid) {
+			selectedProfile.value.is_online = isOnline;
+			selectedProfile.value.last_seen_at = lastSeenAt;
+		}
 	}
 
 	function _removeMessage(chatUuid: string, msgUuid: string) {
@@ -680,10 +725,14 @@ export const useMessengerStore = defineStore("messenger", () => {
 		if (chat) {
 			chat.last_message_body = lastBody;
 			chat.last_message_at = lastAt;
-			const idx = chats.value.indexOf(chat);
-			if (idx > 0) {
-				chats.value.splice(idx, 1);
-				chats.value.unshift(chat);
+			
+			// Move to top of the underlying array to trigger filteredChats naturally
+			const idx = chats.value.findIndex(c => c.uuid === chatUuid);
+			if (idx !== -1) {
+				const moved = chats.value.splice(idx, 1)[0];
+				if (moved) {
+					chats.value.unshift(moved);
+				}
 			}
 		}
 	}
@@ -720,6 +769,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 
 		// Reset state
 		currentUserId.value = "";
+		currentUserProfile.value = null;
 		chats.value = [];
 		messages.value.clear();
 		members.value.clear();
@@ -763,10 +813,20 @@ export const useMessengerStore = defineStore("messenger", () => {
 		// If current active chat is not in the new folder, we keep it selected but user might want to switch
 	}
 
+	// ─── Initialization ───────────────────────────────────────────────
+	onMounted(() => {
+		startNowTimer();
+	});
+
+	onUnmounted(() => {
+		if (nowTimer) clearInterval(nowTimer);
+	});
+
 	return {
 		// state
 		currentUserId,
 		currentUserProfile,
+		currentUserProfileLoading,
 		chats,
 		chatsLoading,
 		messages,
@@ -776,6 +836,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 		wsStatus: status,
 		replyingToMessage,
 		editingMessage,
+		now, // Add 'now' to the returned state
 		// computed
 		activeChat,
 		activeMessages,

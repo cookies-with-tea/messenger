@@ -5,12 +5,13 @@
       :class="containerClass"
       :style="sizeStyle"
     >
-      <img
+      <AppImage
         v-if="props.user?.avatar?.url"
         :src="props.user.avatar.url"
         :alt="props.user.avatar.alt || ''"
-        :title="props.user.avatar.title || ''"
-        class="w-full h-full object-cover"
+        :initials="initials"
+        :size="size"
+        class-name="w-full h-full"
       />
       <span v-else :style="{ fontSize: `${size * 0.45}px` }">{{ initials }}</span>
     </div>
@@ -25,6 +26,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import AppImage from './ui/AppImage.vue'
 import type { UserPreviewDTO } from '@/types'
 
 const props = defineProps<{

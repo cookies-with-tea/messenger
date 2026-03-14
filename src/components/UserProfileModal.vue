@@ -1,26 +1,29 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useMessengerStore } from '@/stores/messengerStore'
 import { useCallStore } from '@/stores/callStore'
 import ChatAvatar from './ChatAvatar.vue'
 import SharedMediaView from './SharedMediaView.vue'
 
 const emit = defineEmits(['openEdit'])
-const store = useMessengerStore()
+const messengerStore = useMessengerStore()
 const callStore = useCallStore()
 
-const isMe = computed(() => store.selectedProfile?.uuid === store.currentUserId)
+const { selectedProfile, isProfileModalOpen, profileLoading, chats, mediaCounts, now, currentUserId } = storeToRefs(messengerStore)
+
+const isMe = computed(() => selectedProfile.value?.uuid === currentUserId.value)
 
 const directChat = computed(() => {
-  if (!store.selectedProfile) return null
-  return store.chats.find(c => 
-    c.chat_type === 'direct' && 
-    c.sender?.uuid === store.selectedProfile?.uuid
+  if (!selectedProfile.value) return null
+  return chats.value.find(c =>
+    c.chat_type === 'direct' &&
+    c.sender?.uuid === selectedProfile.value?.uuid
   )
 })
 
 const originalName = computed(() => {
-  const p = store.selectedProfile
+  const p = selectedProfile.value
   if (!p) return '...'
   return `${p.first_name || ''} ${p.second_name || ''} ${p.last_name || ''}`.replace(/\s+/g, ' ').trim() || 'User'
 })
@@ -33,7 +36,7 @@ const displayName = computed(() => {
 const hasAlias = computed(() => !!directChat.value?.alias)
 
 const statusText = computed(() => {
-  const p = store.selectedProfile
+  const p = selectedProfile.value
   if (!p) return ''
   if (p.is_online) return 'Online'
   return formatLastSeen(p.last_seen_at)
@@ -44,14 +47,14 @@ const savingAlias = ref(false)
 
 watch(() => directChat.value, (chat) => {
   newAlias.value = chat?.alias || ''
-  if (chat && store.isProfileModalOpen) {
-    store.fetchMediaCounts(chat.uuid)
+  if (chat && isProfileModalOpen.value) {
+    messengerStore.fetchMediaCounts(chat.uuid)
   }
 }, { immediate: true })
 
-watch(() => store.isProfileModalOpen, (isOpen) => {
+watch(() => isProfileModalOpen.value, (isOpen) => {
   if (isOpen && directChat.value) {
-    store.fetchMediaCounts(directChat.value.uuid)
+    messengerStore.fetchMediaCounts(directChat.value.uuid)
   } else if (!isOpen) {
     activeMediaType.value = null
   }
@@ -60,64 +63,67 @@ watch(() => store.isProfileModalOpen, (isOpen) => {
 const activeMediaType = ref<'image' | 'video' | 'audio' | null>(null)
 const counts = computed(() => {
   if (!directChat.value) return null
-  return store.mediaCounts.get(directChat.value.uuid)
+  return mediaCounts.value.get(directChat.value.uuid)
 })
 
 function showMedia(type: 'image' | 'video' | 'audio') {
   if (!directChat.value) return
   activeMediaType.value = type
-  store.fetchSharedMedia(directChat.value.uuid, type)
+  messengerStore.fetchSharedMedia(directChat.value.uuid, type)
 }
 
 async function saveAlias() {
   if (!directChat.value) return
   savingAlias.value = true
   try {
-    await store.updateContactAlias(directChat.value.uuid, newAlias.value || null)
+    await messengerStore.updateContactAlias(directChat.value.uuid, newAlias.value || null)
   } finally {
     savingAlias.value = false
   }
 }
 
-function formatLastSeen(ts?: string) {
-  if (!ts) return 'Offline'
+function formatLastSeen(ts?: string | null) {
+  if (!ts) return 'не в сети'
   const date = new Date(ts)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  
-  if (diff < 60_000) return 'last seen just now'
-  if (diff < 3600_000) return `last seen ${Math.floor(diff / 60_000)}m ago`
-  if (diff < 86400_000) return `last seen ${Math.floor(diff / 3600_000)}h ago`
-  return `last seen ${date.toLocaleDateString()}`
+  if (isNaN(date.getTime()) || date.getFullYear() <= 1970) return 'не в сети'
+
+  const diff = now.value.getTime() - date.getTime()
+  if (diff < 60_000) return 'был(а) только что'
+  if (diff < 3_600_000) return `был(а) ${Math.floor(diff / 60_000)} мин. назад`
+  if (diff < 86400_000) return `был(а) ${Math.floor(diff / 3600_000)} час. назад`
+
+  const day = date.getDate().toString().padStart(2, '0')
+  const month = (date.getMonth() + 1).toString().padStart(2, '0')
+  const year = date.getFullYear()
+  return `был(а) ${day}.${month}.${year}`
 }
 
 function startDirectChat() {
-    if (store.selectedProfile) {
-        const existing = store.chats.find(c => 
-            c.chat_type === 'direct' && 
-            c.sender?.uuid === store.selectedProfile?.uuid
-        )
-        if (existing) {
-            store.selectChat(existing.uuid)
-            store.closeProfile()
-        } else {
-            console.log('Should create new direct chat')
-            store.closeProfile()
-        }
+  if (selectedProfile.value) {
+    const existing = chats.value.find(c =>
+      c.chat_type === 'direct' &&
+      c.sender?.uuid === selectedProfile.value?.uuid
+    )
+    if (existing) {
+      messengerStore.selectChat(existing.uuid)
+      messengerStore.closeProfile()
+    } else {
+      messengerStore.closeProfile()
     }
+  }
 }
 
 function callUser() {
-    if (store.selectedProfile) {
-        const existing = store.chats.find(c => 
-            c.chat_type === 'direct' && 
-            c.sender?.uuid === store.selectedProfile?.uuid
-        )
-        if (existing) {
-            callStore.startCall(existing.uuid)
-            store.closeProfile()
-        }
+  if (selectedProfile.value) {
+    const existing = chats.value.find(c =>
+      c.chat_type === 'direct' &&
+      c.sender?.uuid === selectedProfile.value?.uuid
+    )
+    if (existing) {
+      callStore.startCall(existing.uuid)
+      messengerStore.closeProfile()
     }
+  }
 }
 </script>
 
@@ -131,9 +137,9 @@ function callUser() {
     leave-to-class="opacity-0"
   >
     <div
-      v-if="store.isProfileModalOpen"
+      v-if="isProfileModalOpen"
       class="fixed inset-0 z-100 flex items-center justify-center p-4 bg-void/60 backdrop-blur-md"
-      @click.self="store.closeProfile"
+      @click.self="messengerStore.closeProfile"
     >
       <Transition
         enter-active-class="transition duration-300 ease-out"
@@ -144,13 +150,13 @@ function callUser() {
         leave-to-class="opacity-0 scale-95 translate-y-4"
       >
         <div
-          v-if="store.isProfileModalOpen"
+          v-if="isProfileModalOpen"
           class="w-full max-w-sm glass rounded-3xl overflow-y-auto border border-white/10 shadow-2xl relative max-h-[85vh] scrollbar-none"
         >
           <!-- Sticky Header for Close Button -->
           <div class="sticky top-0 z-50 p-4 flex justify-end pointer-events-none">
-             <button 
-                @click="store.closeProfile"
+             <button
+                @click="messengerStore.closeProfile"
                 class="p-2 rounded-full bg-void/40 backdrop-blur-md text-text-dim hover:text-text-bright hover:bg-void/60 transition-all border border-white/5 pointer-events-auto"
               >
                 <svg class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
@@ -167,23 +173,23 @@ function callUser() {
           <div class="px-6 pb-8 -mt-16 relative">
             <div class="flex flex-col items-center text-center">
               <div class="relative">
-                <ChatAvatar 
-                  :chat="store.selectedProfile" 
-                  :size="110" 
-                  class="border-4 border-abyss shadow-2xl" 
+                <ChatAvatar
+                  :chat="selectedProfile"
+                  :size="110"
+                  class="border-4 border-abyss shadow-2xl"
                 />
-                <div 
-                  v-if="store.selectedProfile?.is_online"
+                <div
+                  v-if="selectedProfile?.is_online"
                   class="absolute bottom-2 right-2 w-5 h-5 rounded-full bg-sage border-4 border-abyss shadow-[0_0_10px_rgba(var(--color-sage),0.5)]"
                 ></div>
               </div>
 
-              <template v-if="store.profileLoading">
+              <template v-if="profileLoading">
                 <div class="mt-4 h-6 w-32 bg-white/5 animate-pulse rounded-full"></div>
                 <div class="mt-2 h-4 w-48 bg-white/5 animate-pulse rounded-full"></div>
               </template>
-              
-              <template v-else-if="store.selectedProfile">
+
+              <template v-else-if="selectedProfile">
                 <h2 class="mt-4 text-2xl font-black font-syne text-text-bright tracking-tight uppercase">
                   {{ displayName }}
                 </h2>
@@ -198,31 +204,31 @@ function callUser() {
                 <div class="w-full mt-8 space-y-4">
                   <div class="flex flex-col items-start gap-1">
                     <span class="text-[10px] font-mono text-ember font-bold uppercase tracking-widest">Email Address</span>
-                    <span class="text-sm text-text-bright font-medium">{{ store.selectedProfile.email || '—' }}</span>
-                  </div>
-                  
-                  <div v-if="store.selectedProfile.phone" class="flex flex-col items-start gap-1 border-t border-white/5 pt-4">
-                    <span class="text-[10px] font-mono text-ember font-bold uppercase tracking-widest">Phone Number</span>
-                    <span class="text-sm text-text-bright font-medium">{{ store.selectedProfile.phone }}</span>
+                    <span class="text-sm text-text-bright font-medium">{{ selectedProfile.email || '—' }}</span>
                   </div>
 
-                   <div v-if="store.selectedProfile.city || store.selectedProfile.street" class="flex flex-col items-start gap-1 border-t border-white/5 pt-4">
+                  <div v-if="selectedProfile.phone" class="flex flex-col items-start gap-1 border-t border-white/5 pt-4">
+                    <span class="text-[10px] font-mono text-ember font-bold uppercase tracking-widest">Phone Number</span>
+                    <span class="text-sm text-text-bright font-medium">{{ selectedProfile.phone }}</span>
+                  </div>
+
+                   <div v-if="selectedProfile.city || selectedProfile.street" class="flex flex-col items-start gap-1 border-t border-white/5 pt-4">
                     <span class="text-[10px] font-mono text-ember font-bold uppercase tracking-widest">Location</span>
                     <span class="text-sm text-text-bright font-medium">
-                        {{ [store.selectedProfile.city, store.selectedProfile.street].filter(Boolean).join(', ') }}
+                        {{ [selectedProfile.city, selectedProfile.street].filter(Boolean).join(', ') }}
                     </span>
                   </div>
                 </div>
 
                 <!-- Action Buttons -->
                 <div class="w-full mt-8 grid grid-cols-2 gap-3">
-                  <button 
+                  <button
                     @click="startDirectChat"
                     class="flex items-center justify-center gap-2 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-text-bright font-bold text-xs uppercase transition-all"
                   >
                     <span>Message</span>
                   </button>
-                  <button 
+                  <button
                     @click="callUser"
                     class="flex items-center justify-center gap-2 py-3 rounded-2xl bg-ember/20 hover:bg-ember/30 text-ember font-bold text-xs uppercase transition-all"
                   >
@@ -233,8 +239,8 @@ function callUser() {
                 <!-- Edit/Rename Section -->
                 <div class="w-full mt-4 border-t border-white/5 pt-6">
                   <template v-if="isMe">
-                    <button 
-                      @click="$emit('openEdit')"
+                    <button
+                      @click="emit('openEdit')"
                       class="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-white/10 hover:bg-white/15 text-text-bright font-black text-xs uppercase transition-all tracking-widest border border-white/5 shadow-xl"
                     >
                       <i class="fas fa-edit mr-2"></i>
@@ -245,12 +251,12 @@ function callUser() {
                     <div class="flex flex-col gap-2">
                        <span class="text-[10px] font-mono text-ember font-bold uppercase tracking-widest text-left">Contact Alias</span>
                        <div class="flex gap-2">
-                          <input 
-                            v-model="newAlias" 
-                            placeholder="Set nickname..." 
+                          <input
+                            v-model="newAlias"
+                            placeholder="Set nickname..."
                             class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-text-bright focus:outline-none focus:border-ember transition-all"
                           />
-                          <button 
+                          <button
                             @click="saveAlias"
                             :disabled="savingAlias"
                             class="px-4 py-2 rounded-xl bg-sage/20 text-sage hover:bg-sage/30 text-xs font-bold uppercase transition-all disabled:opacity-50"
@@ -268,7 +274,7 @@ function callUser() {
                       <span class="text-[10px] font-mono text-ember font-bold uppercase tracking-widest">Shared Media</span>
                    </div>
                    <div class="grid grid-cols-3 gap-3">
-                      <button 
+                      <button
                         @click="showMedia('image')"
                         class="flex flex-col items-center gap-2 p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-all border border-white/5"
                       >
@@ -278,7 +284,7 @@ function callUser() {
                             <span class="text-[8px] font-mono text-text-dim uppercase">Photos</span>
                          </div>
                       </button>
-                      <button 
+                      <button
                         @click="showMedia('video')"
                         class="flex flex-col items-center gap-2 p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-all border border-white/5"
                       >
@@ -288,7 +294,7 @@ function callUser() {
                             <span class="text-[8px] font-mono text-text-dim uppercase">Videos</span>
                          </div>
                       </button>
-                      <button 
+                      <button
                         @click="showMedia('audio')"
                         class="flex flex-col items-center gap-2 p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-all border border-white/5"
                       >
@@ -314,9 +320,9 @@ function callUser() {
             leave-to-class="translate-x-full"
           >
             <div v-if="activeMediaType && directChat" class="absolute inset-0 z-100">
-               <SharedMediaView 
-                  :chat-uuid="directChat.uuid" 
-                  :active-type="activeMediaType" 
+               <SharedMediaView
+                  :chat-uuid="directChat.uuid"
+                  :active-type="activeMediaType"
                   @back="activeMediaType = null"
                />
             </div>
@@ -326,3 +332,10 @@ function callUser() {
     </div>
   </Transition>
 </template>
+
+<style scoped>
+.glass {
+  background: rgba(14, 16, 21, 0.95);
+  backdrop-filter: blur(24px);
+}
+</style>

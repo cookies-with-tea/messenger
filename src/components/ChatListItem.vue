@@ -88,10 +88,17 @@ const displayName = computed(() => {
 const timeLabel = computed(() => {
   const ts = props.chat.last_message_at
   if (!ts) return ''
-  const diff = Date.now() - new Date(ts).getTime()
-  if (diff < 60_000)    return 'now'
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`
-  if (diff < 86_400_000)return `${Math.floor(diff / 3_600_000)}h`
-  return `${Math.floor(diff / 86_400_000)}d`
+  const date = new Date(ts)
+  if (isNaN(date.getTime()) || date.getFullYear() <= 1970) return ''
+
+  const diff = messenger.now.getTime() - date.getTime()
+  if (diff < 60_000) return 'сейчас'
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} мин.`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} ч.`
+  
+  const day = date.getDate().toString().padStart(2, '0')
+  const month = (date.getMonth() + 1).toString().padStart(2, '0')
+  const year = date.getFullYear()
+  return `${day}.${month}.${year}`
 })
 </script>
