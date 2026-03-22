@@ -11,7 +11,7 @@ const router = useRouter()
 
 const folders = [
   { id: 'all', label: 'Все', icon: '📡' },
-  { id: 'unread', label: 'Непрочитанные', icon: '🔔' },
+  { id: 'unread', label: 'Новые', icon: '🔔' },
   { id: 'groups', label: 'Группы', icon: '👥' },
   { id: 'archived', label: 'Архив', icon: '📦' }
 ] as const
@@ -94,12 +94,12 @@ const confirmLogout = () => {
     </div>
 
     <!-- Folders Tab Bar -->
-    <div class="flex items-center gap-1 px-2 py-1.5 border-b border-white/5 bg-white/1 overflow-x-auto no-scrollbar">
+    <div class="flex items-center gap-1 px-1.5 py-1.5 border-b border-white/5 bg-white/1 overflow-x-auto no-scrollbar">
       <button
         v-for="f in folders"
         :key="f.id"
         @click="messenger.setFolder(f.id)"
-        class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-mono font-black uppercase tracking-wider transition-all whitespace-nowrap border"
+        class="flex items-center gap-1 px-2 py-1 rounded-lg text-[8px] font-mono font-black uppercase tracking-wider transition-all whitespace-nowrap border"
         :class="messenger.activeFolder === f.id 
           ? 'bg-pulse/10 text-pulse border-pulse/30 shadow-[0_0_15px_rgba(var(--color-pulse),0.1)]' 
           : 'text-text-dim border-transparent hover:text-text-bright hover:bg-white/5'"

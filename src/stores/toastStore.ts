@@ -33,7 +33,7 @@ export const useToastStore = defineStore('toast', () => {
   }
 
   function success(msg: string) { add(msg, 'success'); }
-  function error(msg: string) { add(msg, 'error', 0); } // Erros stay until closed manually usually, but let's keep it 0 for manual or custom
+  function error(msg: string) { add(msg, 'error', 10000); } 
   function info(msg: string) { add(msg, 'info'); }
   function warning(msg: string) { add(msg, 'warning'); }
 

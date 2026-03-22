@@ -91,7 +91,7 @@ export const chatApi = {
 	get: (uuid: string) => get<ApiResponse<ChatResponseDTO>>(`/api/v1/chats/${uuid}`),
 
 	create: (body: { name?: string; description?: string; chat_type: string; member_uuids: string[] }) =>
-		post<ApiResponse<ChatResponseDTO>>("/api/v1/chats", body),
+		post<ApiResponse<string>>("/api/v1/chats", body),
 
 	update: (uuid: string, body: { name?: string; description?: string; avatar?: string; is_archived?: boolean }) =>
 		put<ApiResponse<ChatResponseDTO>>(`/api/v1/chats/${uuid}`, body),

@@ -181,7 +181,8 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessengerStore } from '@/stores/messengerStore'
-import { userApi, chatApi, type UserResponseDTO } from '@/api'
+import { userApi, chatApi } from '@/api'
+import type { UserResponseDTO } from '@/types'
 
 const props  = defineProps<{ open: boolean }>()
 const emit   = defineEmits<{ close: [] }>()
@@ -208,7 +209,11 @@ function colorFor(uuid: string) {
   return COLOR_PALETTE[uuid.charCodeAt(0) % COLOR_PALETTE.length]
 }
 function initials(u: UserResponseDTO) {
-  return [u.first_name, u.last_name].filter(Boolean).map(s => s![0]).join('').toUpperCase() || '?'
+  return [u.first_name, u.last_name]
+    .filter((s): s is string => !!s)
+    .map(s => s[0])
+    .join('')
+    .toUpperCase() || '?'
 }
 function fullName(u: UserResponseDTO) {
   return [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || u.uuid
@@ -220,11 +225,23 @@ function onSearch() {
 }
 
 async function doSearch() {
-  if (!searchQuery.value.trim()) { users.value = []; return }
+  if (!searchQuery.value.trim()) {
+    users.value = []
+    return
+  }
   searching.value = true
   try {
-    const res = await userApi.search(searchQuery.value)
-    users.value = (res.data?.items ?? []).filter(u => u.uuid !== store.currentUserId)
+    const res = await userApi.search(searchQuery.value.trim())
+    // Ensure we have a valid array of users
+    const items = res.data?.items ?? []
+    
+    // Filter out current user if store knows it
+    const me = store.currentUserId
+    users.value = items.filter(u => u.uuid !== me)
+    
+    console.log('Search results:', users.value.length, 'query:', searchQuery.value)
+  } catch (err) {
+    console.error('Search failed:', err)
   } finally {
     searching.value = false
   }
@@ -241,7 +258,7 @@ function toggleSelect(u: UserResponseDTO) {
   isSelected(u) ? removeSelected(u) : selectedUsers.value.push(u)
 }
 function removeSelected(u: UserResponseDTO) {
-  selectedUsers.value = selectedUsers.value.filter(s => s.uuid !== u.uuid)
+  selectedUsers.value = selectedUsers.value.filter((s: UserResponseDTO) => s.uuid !== u.uuid)
 }
 
 async function startDirectChat(user: UserResponseDTO) {
@@ -253,9 +270,9 @@ async function startDirectChat(user: UserResponseDTO) {
     })
     if (res.data) {
       await store.fetchChats()
-      await store.selectChat(res.data.uuid)
-      if (router.currentRoute.value.path !== `/chat/${res.data.uuid}`) {
-        router.push(`/chat/${res.data.uuid}`)
+      await store.selectChat(res.data)
+      if (router.currentRoute.value.path !== `/chat/${res.data}`) {
+        router.push(`/chat/${res.data}`)
       }
       close()
     }
@@ -275,9 +292,9 @@ async function createGroup() {
     })
     if (res.data) {
       await store.fetchChats()
-      await store.selectChat(res.data.uuid)
-      if (router.currentRoute.value.path !== `/chat/${res.data.uuid}`) {
-        router.push(`/chat/${res.data.uuid}`)
+      await store.selectChat(res.data)
+      if (router.currentRoute.value.path !== `/chat/${res.data}`) {
+        router.push(`/chat/${res.data}`)
       }
       close()
     }

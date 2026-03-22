@@ -417,6 +417,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 	// ─── Select & open chat ───────────────────────────────────────────
 	// WS НЕ переподключается — он глобальный и уже открыт
 	async function selectChat(chatUuid: string) {
+		if (!chatUuid || chatUuid === 'undefined') return;
 		if (activeChatId.value === chatUuid) return;
 
 		activeChatId.value = chatUuid;
@@ -437,6 +438,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 
 	// ─── Load messages ────────────────────────────────────────────────
 	async function fetchMessages(chatUuid: string, beforeUuid?: string) {
+		if (!chatUuid || chatUuid === 'undefined') return;
 		if (messagesLoading.value) return;
 		messagesLoading.value = true;
 		try {
@@ -817,6 +819,15 @@ export const useMessengerStore = defineStore("messenger", () => {
 	onMounted(() => {
 		startNowTimer();
 	});
+
+	// Sync activeChatId with route
+	watch(() => router.currentRoute.value.params.chatId, (newId) => {
+		if (newId && typeof newId === 'string' && newId !== 'undefined') {
+			selectChat(newId);
+		} else if (!newId) {
+			activeChatId.value = null;
+		}
+	}, { immediate: true });
 
 	onUnmounted(() => {
 		if (nowTimer) clearInterval(nowTimer);
