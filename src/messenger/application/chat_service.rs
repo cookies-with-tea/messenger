@@ -28,6 +28,15 @@ impl ChatService {
     }
 
     pub async fn create_chat(&self, creator_uuid: Uuid, dto: CreateChatDTO) -> Result<Uuid, sqlx::Error> {
+        // If it's a direct chat, check if it already exists
+        if dto.chat_type == crate::messenger::dto::ChatType::Direct {
+            if let Some(other_member_uuid) = dto.member_uuids.first() {
+                if let Some(existing_uuid) = self.repo.find_direct_chat(creator_uuid, *other_member_uuid).await? {
+                    return Ok(existing_uuid);
+                }
+            }
+        }
+
         // Business logic: check number of members for direct chat, etc.
         let chat_uuid = self.repo.create(
             &dto.name,

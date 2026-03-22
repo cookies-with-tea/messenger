@@ -266,6 +266,23 @@ impl ChatRepository for PostgresMessengerRepository {
         .fetch_one(&self.pool)
         .await
     }
+
+    async fn find_direct_chat(&self, user1: Uuid, user2: Uuid) -> Result<Option<Uuid>, sqlx::Error> {
+        sqlx::query_scalar(
+            r#"
+            SELECT c.uuid
+            FROM chat c
+            WHERE c.chat_type = 'direct'
+              AND EXISTS (SELECT 1 FROM chat_member cm1 WHERE cm1.chat_uuid = c.uuid AND cm1.user_uuid = $1 AND cm1.left_at IS NULL)
+              AND EXISTS (SELECT 1 FROM chat_member cm2 WHERE cm2.chat_uuid = c.uuid AND cm2.user_uuid = $2 AND cm2.left_at IS NULL)
+            LIMIT 1
+            "#,
+        )
+        .bind(user1)
+        .bind(user2)
+        .fetch_optional(&self.pool)
+        .await
+    }
 }
 
 const MSG_SELECT: &str = r#"

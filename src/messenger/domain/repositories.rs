@@ -18,6 +18,7 @@ pub trait ChatRepository: Send + Sync {
     async fn is_admin(&self, chat_uuid: Uuid, user_uuid: Uuid) -> Result<bool, sqlx::Error>;
     async fn delete(&self, uuid: Uuid) -> Result<(), sqlx::Error>;
     async fn get_media_counts(&self, chat_uuid: Uuid) -> Result<crate::messenger::dto::ChatMediaCountsDTO, sqlx::Error>;
+    async fn find_direct_chat(&self, user1: Uuid, user2: Uuid) -> Result<Option<Uuid>, sqlx::Error>;
 }
 
 #[async_trait]
