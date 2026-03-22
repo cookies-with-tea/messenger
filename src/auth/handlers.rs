@@ -18,7 +18,6 @@ use jsonwebtoken::{encode, EncodingKey, Header};
 use sqlx::{query_as, Row};
 use std::env;
 use std::sync::Arc;
-use tokio::task;
 use uuid::Uuid;
 
 fn verify_password(password: &str, hash: &str) -> bool {

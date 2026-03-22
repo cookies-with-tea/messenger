@@ -3,6 +3,21 @@ use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::transport::smtp::extension::ClientId;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use std::time::Duration;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum MailError {
+    #[error("Failed to build TLS parameters: {0}")]
+    Tls(String),
+    #[error("Failed to parse address: {0}")]
+    ParseAddress(#[from] lettre::address::AddressError),
+    #[error("Failed to build email message: {0}")]
+    BuildMessage(#[from] lettre::error::Error),
+    #[error("SMTP transport error: {0}")]
+    Transport(#[from] lettre::transport::smtp::Error),
+    #[error("Unknown mailer error: {0}")]
+    Other(String),
+}
 
 pub async fn send_email(
     to_email: String,
@@ -13,13 +28,19 @@ pub async fn send_email(
     smtp_username: String,
     smtp_password: String,
     smtp_from: String,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    tracing::info!("Sending email to {}", to_email);
+) -> Result<(), MailError> {
+    tracing::info!(
+        "Attempting to send registration email to {} via {}:{}",
+        to_email,
+        smtp_host,
+        smtp_port
+    );
+
     let link = format!("{}/confirm-register?key={}", frontend_url, token);
 
     let tls_parameters = TlsParameters::builder(smtp_host.clone())
         .build()
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+        .map_err(|e| MailError::Tls(e.to_string()))?;
 
     let email = Message::builder()
         .from(smtp_from.parse()?)
@@ -39,6 +60,14 @@ pub async fn send_email(
         .timeout(Some(Duration::from_secs(10)))
         .build();
 
-    mailer.send(email).await?;
-    Ok(())
+    match mailer.send(email).await {
+        Ok(_) => {
+            tracing::info!("Successfully sent registration email to {}", to_email);
+            Ok(())
+        }
+        Err(e) => {
+            tracing::error!("Failed to send email to {}: {:?}", to_email, e);
+            Err(MailError::Transport(e))
+        }
+    }
 }
