@@ -11,6 +11,7 @@ services:
       - "${APP_PORT}:${APP_PORT}"
     volumes:
       - ./:/opt/rust-messenger/
+    working_dir: /opt/rust-messenger
     depends_on:
       - db
     networks:

@@ -115,7 +115,7 @@ impl ChatService {
                 second_name: row.sender_second_name,
                 avatar: row.sender_avatar_uuid.map(|avatar_uuid| crate::core::dto::MediaDTO {
                     uuid: avatar_uuid,
-                    url: row.sender_avatar_url.unwrap_or_else(|| format!("{}/media/image/{}", self.media_base_url, avatar_uuid)),
+                    url: row.sender_avatar_url.unwrap_or_else(|| format!("{}/media/image/{}.png", self.media_base_url, avatar_uuid)),
                     alt: None,
                     title: None,
                     media_type: Some("image".to_string()),

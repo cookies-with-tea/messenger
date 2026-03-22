@@ -23,6 +23,8 @@ EOF
 ################################################################################
 FROM debian:bullseye-slim AS final
 
+WORKDIR /opt/rust-messenger
+
 ARG UID=10001
 
 COPY --from=build /bin/server /bin/
