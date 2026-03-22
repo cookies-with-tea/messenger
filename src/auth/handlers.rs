@@ -118,8 +118,8 @@ pub async fn register(
     match result {
         Ok(_) => {
             let value = state.clone();
-            let email_result = task::spawn_blocking(move || {
-                send_email(
+            tokio::spawn(async move {
+                let email_result = send_email(
                     payload.email.clone(),
                     token.clone(),
                     value.frontend_url.clone(),
@@ -129,19 +129,14 @@ pub async fn register(
                     value.smtp_password.clone(),
                     value.smtp_from.clone(),
                 )
-            })
-            .await
-            .unwrap_or_else(|_| Err("Panic during email sending".into()));
+                .await;
 
-            if let Err(_e) = email_result {
-                let msg = state.i18n.t("general.email_failed", &locale).await;
-                return into_api_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    None,
-                    Some(error_map(&"email".to_string(), &msg)),
-                    Some(vec![msg]),
-                );
-            }
+                if let Err(e) = email_result {
+                    tracing::error!("Failed to send registration email to {}: {:?}", payload.email, e);
+                } else {
+                    tracing::info!("Registration email sent to {}", payload.email);
+                }
+            });
 
             let msg = state.i18n.t("auth.register.check_email", &locale).await;
             into_api_response(StatusCode::CREATED, None, None, Some(vec![msg]))

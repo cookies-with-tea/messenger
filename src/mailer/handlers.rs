@@ -1,9 +1,10 @@
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::transport::smtp::extension::ClientId;
-use lettre::{Message, SmtpTransport, Transport};
+use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
+use std::time::Duration;
 
-pub fn send_email(
+pub async fn send_email(
     to_email: String,
     token: String,
     frontend_url: String,
@@ -13,6 +14,7 @@ pub fn send_email(
     smtp_password: String,
     smtp_from: String,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    tracing::info!("Sending email to {}", to_email);
     let link = format!("{}/confirm-register?key={}", frontend_url, token);
 
     let tls_parameters = TlsParameters::builder(smtp_host.clone())
@@ -29,13 +31,14 @@ pub fn send_email(
         ))?;
 
     let creds = Credentials::new(smtp_username, smtp_password);
-    let mailer = SmtpTransport::relay(&smtp_host)?
+    let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_host)?
         .port(smtp_port)
         .tls(Tls::Wrapper(tls_parameters))
         .credentials(creds)
         .hello_name(ClientId::Domain("localhost".to_string()))
+        .timeout(Some(Duration::from_secs(10)))
         .build();
 
-    mailer.send(&email)?;
+    mailer.send(email).await?;
     Ok(())
 }
