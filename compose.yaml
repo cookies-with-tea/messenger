@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: .
+    ports:
+      - "5174:80"
+    environment:
+      - VITE_BASE_REST_URL=${VITE_BASE_REST_URL}
+      - VITE_BASE_WS_URL=${VITE_BASE_WS_URL}
+      - VITE_GIF_API_KEY=${VITE_GIF_API_KEY}
+    networks:
+      - default
+      - messenger-server
+
+volumes:
+  node_modules:
+
+networks:
+  messenger-server:
+    name: messenger-server
+    external: true
