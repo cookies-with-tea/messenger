@@ -3,11 +3,11 @@ use crate::auth::dto::{
     RegisterRequestDTO,
 };
 use crate::core::dto::ApiResponse;
-use crate::core::response::{error_map, into_api_response};
+use crate::user::handlers::create as create_user;
+use crate::user::dto::{CreateUserDTO, User};
 use crate::mailer::handlers::send_email;
-use crate::user::dto::User;
 use crate::user::utils::validate_email;
-use crate::AppState;
+use crate::{AppState, core::response::{error_map, into_api_response}};
 use argon2::{password_hash::PasswordHash, Argon2, PasswordVerifier};
 use axum::routing::post;
 use axum::Router;
@@ -21,10 +21,20 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 fn verify_password(password: &str, hash: &str) -> bool {
-    let parsed_hash = PasswordHash::new(hash).unwrap();
-    Argon2::default()
-        .verify_password(password.as_bytes(), &parsed_hash)
-        .is_ok()
+    let parsed_hash = match PasswordHash::new(hash) {
+        Ok(h) => h,
+        Err(e) => {
+            tracing::error!("Failed to parse password hash: {:?}", e);
+            return false;
+        }
+    };
+    match Argon2::default().verify_password(password.as_bytes(), &parsed_hash) {
+        Ok(_) => true,
+        Err(e) => {
+            tracing::warn!("Password verification failed: {:?}", e);
+            false
+        }
+    }
 }
 
 fn generate_token(user_id: Uuid, expires_in_minutes: i64) -> (String, i64) {
@@ -89,7 +99,45 @@ pub async fn register(
     Extension(locale): Extension<String>,
     Json(payload): Json<RegisterRequestDTO>,
 ) -> Result<Json<ApiResponse<()>>, (StatusCode, Json<ApiResponse<()>>)> {
-    if !validate_email(&payload.email) {
+    let email = payload.email.to_lowercase();
+    if !state.is_registration_email {
+        // Direct registration
+        if payload.password.is_none() || payload.password.as_ref().unwrap().is_empty() {
+             let msg = "Password is required for direct registration".to_string();
+             return into_api_response(
+                StatusCode::BAD_REQUEST,
+                None,
+                Some(error_map(&"password".to_string(), &msg)),
+                Some(vec![msg]),
+            );
+        }
+
+        let create_payload = CreateUserDTO {
+            email: email.clone(),
+            password: payload.password.unwrap(),
+            first_name: payload.first_name,
+            last_name: payload.last_name,
+            phone: None,
+            second_name: None,
+            birth_date: None,
+            role: None,
+            status: None,
+            avatar: None,
+            avatar_uuid: None,
+            street: None,
+            city: None,
+            gender: None,
+        };
+
+        return create_user(
+            State(state.clone()),
+            Extension(locale),
+            Json(create_payload),
+        )
+        .await;
+    }
+
+    if !validate_email(&email) {
         let msg = state.i18n.t("user.email_invalid", &locale).await;
         return into_api_response(
             StatusCode::BAD_REQUEST,
@@ -108,7 +156,7 @@ pub async fn register(
          ON CONFLICT (email) DO UPDATE \
          SET token = $2, expires_at = $3",
     )
-    .bind(&payload.email)
+    .bind(&email)
     .bind(&token)
     .bind(expires_at)
     .execute(&state.pool)
@@ -258,13 +306,15 @@ pub async fn login(
     Extension(locale): Extension<String>,
     Json(payload): Json<AuthRequestDTO>,
 ) -> Result<Json<ApiResponse<AuthResponseDTO>>, (StatusCode, Json<ApiResponse<AuthResponseDTO>>)> {
+    let email = payload.email.to_lowercase();
     let user = match query_as::<_, User>("SELECT * FROM guest_user WHERE email = $1")
-        .bind(&payload.email)
+        .bind(&email)
         .fetch_optional(&state.pool)
         .await
     {
         Ok(Some(user)) => user,
         Ok(None) => {
+            tracing::info!("Login failed: user not found for email {}", email);
             let msg = state.i18n.t("auth.invalid_credentials", &locale).await;
             return into_api_response(
                 StatusCode::UNAUTHORIZED,

@@ -39,7 +39,7 @@ fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error>
     tag = "User",
     operation_id = "create_user",
 )]
-async fn create(
+pub async fn create(
     State(state): State<Arc<AppState>>,
     Extension(locale): Extension<String>,
     Json(payload): Json<CreateUserDTO>,

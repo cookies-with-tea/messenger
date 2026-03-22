@@ -3,8 +3,12 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 #[derive(Deserialize, Debug, ToSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct RegisterRequestDTO {
     pub email: String,
+    pub password: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
 }
 
 #[derive(Deserialize, Debug, ToSchema)]

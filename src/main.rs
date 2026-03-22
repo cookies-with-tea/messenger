@@ -46,6 +46,7 @@ struct AppState {
     ws_state: Option<WsState>,
     user_ws_state: Option<UserWsState>,
     media_base_url: String,
+    is_registration_email: bool,
 }
 
 #[derive(OpenApi)]
@@ -161,6 +162,10 @@ async fn main() {
     let smtp_username = env::var("SMTP_USERNAME").expect("SMTP_USERNAME must be set");
     let smtp_password = env::var("SMTP_PASSWORD").expect("SMTP_PASSWORD must be set");
     let smtp_from = env::var("SMTP_FROM").expect("SMTP_FROM must be set");
+    let is_registration_email = env::var("IS_REGISTRATION_EMAIL")
+        .unwrap_or_else(|_| "false".to_string())
+        .parse()
+        .unwrap_or(false);
 
     let i18n = I18nService::new(pool.clone());
 
@@ -178,7 +183,9 @@ async fn main() {
 
         ws_state: Some(WsState::new()),
         user_ws_state: Some(UserWsState::new()),
-        media_base_url: env::var("PUBLIC_URL").unwrap_or_else(|_| "http://localhost:8000".to_string()),
+        media_base_url: env::var("PUBLIC_URL")
+            .unwrap_or_else(|_| "http://localhost:8000".to_string()),
+        is_registration_email,
     });
 
     let cors = {
