@@ -98,6 +98,21 @@ pub async fn ws_user_upgrade(
                     WsClientAction::TogglePinMessage { chat_uuid, uuid, is_pinned } => {
                         let _ = service.toggle_pin(chat_uuid, uuid, is_pinned).await;
                     }
+                    WsClientAction::CallOffer { chat_uuid, sdp } => {
+                        let _ = service.handle_call_offer(chat_uuid, user_uuid, sdp).await;
+                    }
+                    WsClientAction::CallAnswer { chat_uuid, sdp } => {
+                        let _ = service.handle_call_answer(chat_uuid, user_uuid, sdp).await;
+                    }
+                    WsClientAction::IceCandidate { chat_uuid, candidate, sdp_mid, sdp_m_line_index } => {
+                        let _ = service.handle_ice_candidate(chat_uuid, user_uuid, candidate, sdp_mid, sdp_m_line_index).await;
+                    }
+                    WsClientAction::CallReject { chat_uuid } => {
+                        let _ = service.handle_call_reject(chat_uuid, user_uuid).await;
+                    }
+                    WsClientAction::CallEnd { chat_uuid } => {
+                        let _ = service.handle_call_end(chat_uuid, user_uuid).await;
+                    }
                     _ => {}
                 }
             }

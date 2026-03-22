@@ -13,6 +13,9 @@ services:
       - ./:/opt/rust-messenger/
     depends_on:
       - db
+    networks:
+      - default
+      - messenger-server
 
   db:
     image: postgres:16.0
@@ -27,7 +30,14 @@ services:
       interval: 10s
       timeout: 15s
       retries: 5
+    networks:
+      - default
+      - messenger-server
 
 
 volumes:
   postgres_data:
+
+networks:
+  messenger-server:
+    name: messenger-server

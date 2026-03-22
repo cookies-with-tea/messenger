@@ -17,6 +17,58 @@ impl MessageService {
         Self { repo, chat_repo, ws, media_base_url }
     }
 
+    // ─── WebRTC Signaling ───
+
+    pub async fn handle_call_offer(&self, chat_uuid: Uuid, caller_uuid: Uuid, sdp: String) -> Result<(), sqlx::Error> {
+        if let Some(ws) = &self.ws {
+            if let Ok(members) = self.chat_repo.get_member_uuids(chat_uuid).await {
+                let recipients: Vec<Uuid> = members.into_iter().filter(|&uid| uid != caller_uuid).collect();
+                ws.broadcast_to_users(&recipients, WsServerEvent::CallOffer { chat_uuid, caller_uuid, sdp }).await;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn handle_call_answer(&self, chat_uuid: Uuid, responder_uuid: Uuid, sdp: String) -> Result<(), sqlx::Error> {
+        if let Some(ws) = &self.ws {
+            if let Ok(members) = self.chat_repo.get_member_uuids(chat_uuid).await {
+                let recipients: Vec<Uuid> = members.into_iter().filter(|&uid| uid != responder_uuid).collect();
+                ws.broadcast_to_users(&recipients, WsServerEvent::CallAnswer { chat_uuid, responder_uuid, sdp }).await;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn handle_ice_candidate(&self, chat_uuid: Uuid, sender_uuid: Uuid, candidate: String, sdp_mid: Option<String>, sdp_m_line_index: Option<i32>) -> Result<(), sqlx::Error> {
+        if let Some(ws) = &self.ws {
+            if let Ok(members) = self.chat_repo.get_member_uuids(chat_uuid).await {
+                let recipients: Vec<Uuid> = members.into_iter().filter(|&uid| uid != sender_uuid).collect();
+                ws.broadcast_to_users(&recipients, WsServerEvent::IceCandidate { chat_uuid, sender_uuid, candidate, sdp_mid, sdp_m_line_index }).await;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn handle_call_reject(&self, chat_uuid: Uuid, user_uuid: Uuid) -> Result<(), sqlx::Error> {
+        if let Some(ws) = &self.ws {
+            if let Ok(members) = self.chat_repo.get_member_uuids(chat_uuid).await {
+                let recipients: Vec<Uuid> = members.into_iter().filter(|&uid| uid != user_uuid).collect();
+                ws.broadcast_to_users(&recipients, WsServerEvent::CallReject { chat_uuid, user_uuid }).await;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn handle_call_end(&self, chat_uuid: Uuid, user_uuid: Uuid) -> Result<(), sqlx::Error> {
+        if let Some(ws) = &self.ws {
+            if let Ok(members) = self.chat_repo.get_member_uuids(chat_uuid).await {
+                let recipients: Vec<Uuid> = members.into_iter().filter(|&uid| uid != user_uuid).collect();
+                ws.broadcast_to_users(&recipients, WsServerEvent::CallEnd { chat_uuid, user_uuid }).await;
+            }
+        }
+        Ok(())
+    }
+
     pub async fn get_messages(&self, chat_uuid: Uuid, limit: i64, page: i64, before: Option<Uuid>) -> Result<(Vec<MessageResponseDTO>, i64), sqlx::Error> {
         let rows = if let Some(cursor) = before {
             self.repo.find_all_before_cursor(chat_uuid, cursor, limit).await?
