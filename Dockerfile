@@ -1,5 +1,5 @@
 # Используем официальный образ Node.js
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
@@ -8,6 +8,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Устанавливаем зависимости
+RUN npm install pnpm -g
 RUN pnpm install
 
 # Копируем остальные файлы проекта

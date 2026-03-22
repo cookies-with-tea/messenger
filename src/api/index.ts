@@ -13,7 +13,7 @@ import { useToastStore } from "@/stores/toastStore";
 import { ref } from "vue";
 
 const IS_DEV = import.meta.env.DEV;
-const BASE = IS_DEV ? "" : (import.meta.env.VITE_BASE_URL ?? "http://localhost:8080");
+const BASE = IS_DEV ? "" : (import.meta.env.VITE_BASE_REST_URL ?? "http://localhost:8080");
 
 // Reactive token for WebSockets
 const accessToken = ref(localStorage.getItem("access_token"));
