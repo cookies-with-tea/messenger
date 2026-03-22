@@ -28,6 +28,11 @@ export default defineConfig(({ mode }) => {
           ws: true,
           changeOrigin: true,
         },
+
+        '/media': {
+          target: env.VITE_BASE_REST_URL,
+          changeOrigin: true,
+        },
       },
     },
 
