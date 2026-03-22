@@ -204,8 +204,9 @@ export interface AuthResponseDTO {
 }
 
 export const authApi = {
-	// Step 1: send email → backend emails a confirm link
-	register: (email: string) => post<ApiResponse<null>>("/api/v1/auth/register", { email }),
+	// Step 1: send email → backend emails a confirm link (or direct registration if disabled)
+	register: (body: { email: string; password?: string; first_name?: string; last_name?: string }) => 
+		post<ApiResponse<null>>("/api/v1/auth/register", body),
 
 	// Step 2: confirm link → /confirm-register?key=UUID
 	checkKey: (key: string) => post<ApiResponse<null>>("/api/v1/auth/register/key", { key }),
