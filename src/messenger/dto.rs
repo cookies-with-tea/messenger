@@ -77,6 +77,8 @@ pub struct ChatRow {
     #[sqlx(default)]
     pub sender_avatar_uuid: Option<Uuid>,
     #[sqlx(default)]
+    pub sender_avatar_url: Option<String>,
+    #[sqlx(default)]
     pub sender_last_seen_at: Option<DateTime<Utc>>,
     #[sqlx(default)]
     pub sender_is_online: bool,

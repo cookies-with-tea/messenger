@@ -130,6 +130,20 @@ impl MessageService {
         Ok(dtos)
     }
 
+    pub async fn get_media(&self, chat_uuid: Uuid, media_type: Option<String>, limit: i64, page: i64) -> Result<(Vec<MessageResponseDTO>, i64), sqlx::Error> {
+        let offset = (page - 1) * limit;
+        let rows = self.repo.find_media(chat_uuid, media_type, limit, offset).await?;
+        // For simplicity, we can reuse count_all_in_chat or add a specific count_media if needed.
+        // But shared media view usually doesn't need a strict total count if it's infinite scroll.
+        // However, find_media in repo doesn't return total.
+        // Let's just return the rows for now.
+        let mut dtos = Vec::new();
+        for row in rows {
+            dtos.push(self.map_message_row_to_dto_async(row).await);
+        }
+        Ok((dtos, 0)) // 0 as total for now, or we could implement count_media
+    }
+
     pub async fn get_message_receipts(&self, message_uuid: Uuid) -> Result<Vec<crate::messenger::dto::MessageReceiptDTO>, sqlx::Error> {
         let rows = self.repo.get_receipts(message_uuid).await?;
         let mut dtos = Vec::new();
@@ -145,7 +159,7 @@ impl MessageService {
                     second_name: row.second_name,
                     avatar: row.avatar_uuid.map(|avatar_uuid| crate::core::dto::MediaDTO {
                         uuid: avatar_uuid,
-                        url: format!("{}/media/image/{}.png", self.media_base_url, avatar_uuid),
+                        url: format!("{}/media/image/{}", self.media_base_url, avatar_uuid),
                         alt: None,
                         title: None,
                         media_type: Some("image".to_string()),
@@ -202,7 +216,7 @@ impl MessageService {
                 second_name: row.sender_second_name,
                 avatar: row.sender_avatar_uuid.map(|avatar_uuid| crate::core::dto::MediaDTO {
                     uuid: avatar_uuid,
-                    url: format!("{}/media/image/{}.png", self.media_base_url, avatar_uuid),
+                    url: format!("{}/media/image/{}", self.media_base_url, avatar_uuid),
                     alt: None,
                     title: None,
                     media_type: Some("image".to_string()),
@@ -216,7 +230,13 @@ impl MessageService {
             reply_body_preview: row.reply_body_preview,
             media: row.media_uuid.map(|media_uuid| crate::core::dto::MediaDTO {
                 uuid: media_uuid,
-                url: row.media_url.unwrap_or_else(|| format!("{}/media/image/{}.png", self.media_base_url, media_uuid)),
+                url: row.media_url.clone().unwrap_or_else(|| {
+                    format!("{}/media/{}/{}", 
+                        self.media_base_url, 
+                        row.media_type.as_deref().unwrap_or("image"),
+                        media_uuid
+                    )
+                }),
                 alt: row.media_alt,
                 title: row.media_title,
                 media_type: row.media_type,

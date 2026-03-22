@@ -18,7 +18,6 @@ pub trait ChatRepository: Send + Sync {
     async fn is_admin(&self, chat_uuid: Uuid, user_uuid: Uuid) -> Result<bool, sqlx::Error>;
     async fn delete(&self, uuid: Uuid) -> Result<(), sqlx::Error>;
     async fn get_media_counts(&self, chat_uuid: Uuid) -> Result<crate::messenger::dto::ChatMediaCountsDTO, sqlx::Error>;
-    async fn find_media(&self, chat_uuid: Uuid, media_type: Option<String>, limit: i64, offset: i64) -> Result<Vec<MessageRow>, sqlx::Error>;
 }
 
 #[async_trait]
@@ -36,4 +35,5 @@ pub trait MessageRepository: Send + Sync {
     async fn search(&self, user_uuid: Uuid, chat_uuid: Option<Uuid>, query: &str, limit: i64) -> Result<Vec<MessageRow>, sqlx::Error>;
     async fn get_receipts(&self, message_uuid: Uuid) -> Result<Vec<crate::messenger::dto::MessageReceiptRow>, sqlx::Error>;
     async fn update_pin(&self, uuid: Uuid, is_pinned: bool) -> Result<(), sqlx::Error>;
+    async fn find_media(&self, chat_uuid: Uuid, media_type: Option<String>, limit: i64, offset: i64) -> Result<Vec<MessageRow>, sqlx::Error>;
 }

@@ -13,6 +13,7 @@ pub fn messenger_router() -> Router<Arc<AppState>> {
         .route("/{chat_uuid}", routing::get(chat_handlers::get_chat).put(chat_handlers::update_chat).delete(chat_handlers::delete_chat))
         .route("/{chat_uuid}/alias", routing::patch(chat_handlers::set_alias))
         .route("/{chat_uuid}/members", routing::get(chat_handlers::get_members))
+        .route("/{chat_uuid}/media", routing::get(message_handlers::get_media))
         .route("/{chat_uuid}/media/counts", routing::get(chat_handlers::get_media_counts))
         
         // Messages

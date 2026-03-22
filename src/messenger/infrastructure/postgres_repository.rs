@@ -30,14 +30,15 @@ impl ChatRepository for PostgresMessengerRepository {
                 gu.first_name AS sender_first_name,
                 gu.second_name AS sender_second_name,
                 gu.avatar_uuid AS sender_avatar_uuid,
+                med_avatar.url AS sender_avatar_url,
                 gu.last_seen_at AS sender_last_seen_at,
                 gu.is_online AS sender_is_online,
                 cm_other.alias AS alias
             FROM chat c
             LEFT JOIN chat_member cm_other ON cm_other.chat_uuid = c.uuid 
                 AND c.chat_type = 'direct'
-                -- Simplified: in direct chats there's only one other person
             LEFT JOIN guest_user gu ON gu.uuid = cm_other.user_uuid
+            LEFT JOIN media med_avatar ON med_avatar.uuid = gu.avatar_uuid
             LEFT JOIN LATERAL (
                 SELECT body, created_at FROM message
                 WHERE chat_uuid = c.uuid AND is_deleted = FALSE
@@ -74,6 +75,7 @@ impl ChatRepository for PostgresMessengerRepository {
                 gu.first_name                   AS sender_first_name,
                 gu.second_name                  AS sender_second_name,
                 gu.avatar_uuid                  AS sender_avatar_uuid,
+                med_avatar.url                  AS sender_avatar_url,
                 gu.last_seen_at                 AS sender_last_seen_at,
                 gu.is_online                   AS sender_is_online,
                 cm.alias                        AS alias
@@ -84,6 +86,7 @@ impl ChatRepository for PostgresMessengerRepository {
             LEFT JOIN chat_member cm_other ON cm_other.chat_uuid = c.uuid
                 AND cm_other.user_uuid != $1 AND cm_other.left_at IS NULL
             LEFT JOIN guest_user gu ON gu.uuid = cm_other.user_uuid
+            LEFT JOIN media med_avatar ON med_avatar.uuid = gu.avatar_uuid
             LEFT JOIN LATERAL (
                 SELECT body, created_at FROM message
                 WHERE chat_uuid = c.uuid AND is_deleted = FALSE
@@ -261,27 +264,6 @@ impl ChatRepository for PostgresMessengerRepository {
         )
         .bind(chat_uuid)
         .fetch_one(&self.pool)
-        .await
-    }
-
-    async fn find_media(&self, chat_uuid: Uuid, media_type: Option<String>, limit: i64, offset: i64) -> Result<Vec<MessageRow>, sqlx::Error> {
-        query_as::<_, MessageRow>(
-            &format!(
-                "{}
-                 JOIN media med ON med.uuid = m.media_uuid
-                 WHERE m.chat_uuid = $1 AND m.is_deleted = FALSE
-                   AND ($3::text IS NULL OR med.media_type = $3::media_type)
-                 ORDER BY m.created_at DESC
-                 LIMIT $4 OFFSET $5",
-                MSG_SELECT
-            )
-        )
-        .bind(chat_uuid)
-        .bind(Uuid::nil())
-        .bind(media_type)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&self.pool)
         .await
     }
 }
@@ -566,5 +548,26 @@ impl MessageRepository for PostgresMessengerRepository {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    async fn find_media(&self, chat_uuid: Uuid, media_type: Option<String>, limit: i64, offset: i64) -> Result<Vec<MessageRow>, sqlx::Error> {
+        query_as::<_, MessageRow>(
+            &format!(
+                "{}
+                 WHERE m.chat_uuid = $1 AND m.is_deleted = FALSE
+                   AND m.media_uuid IS NOT NULL
+                   AND ($3::text IS NULL OR med.media_type = $3::media_type)
+                 ORDER BY m.created_at DESC
+                 LIMIT $4 OFFSET $5",
+                MSG_SELECT
+            )
+        )
+        .bind(chat_uuid)
+        .bind(Uuid::nil())
+        .bind(media_type)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
     }
 }

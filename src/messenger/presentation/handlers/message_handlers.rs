@@ -300,3 +300,40 @@ pub async fn get_message_receipts(
         }
     }
 }
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/messenger/chats/{chat_uuid}/media",
+    params(
+        ("chat_uuid" = Uuid, Path, description = "Chat UUID"),
+        ("media_type" = Option<String>, Query, description = "Media type (image, video, audio)"),
+        ("page" = Option<i64>, Query, description = "Page number"),
+        ("limit" = Option<i64>, Query, description = "Items per page")
+    ),
+    responses(
+        (status = 200, body = ApiResponse<Vec<MessageResponseDTO>>),
+    ),
+    tag = "Messenger",
+    security(("bearer_auth" = []))
+)]
+pub async fn get_media(
+    State(state): State<Arc<AppState>>,
+    Path(chat_uuid): Path<Uuid>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let media_type = params.get("media_type").cloned();
+    let page = params.get("page").and_then(|p| p.parse().ok()).unwrap_or(1);
+    let limit = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(20);
+
+    let repo = Arc::new(PostgresMessengerRepository::new(state.pool.clone())) as Arc<dyn MessageRepository>;
+    let chat_repo = Arc::new(PostgresMessengerRepository::new(state.pool.clone())) as Arc<dyn ChatRepository>;
+    let service = MessageService::new(repo, chat_repo, state.user_ws_state.clone().map(Arc::new), state.media_base_url.clone());
+
+    match service.get_media(chat_uuid, media_type, limit, page).await {
+        Ok((media, _)) => into_api_response(StatusCode::OK, Some(media), None, None),
+        Err(e) => {
+            eprintln!("Error fetching media: {:?}", e);
+            into_api_response(StatusCode::INTERNAL_SERVER_ERROR, None, None, Some(vec!["Failed to fetch media".into()]))
+        }
+    }
+}
