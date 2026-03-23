@@ -43,7 +43,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useMessengerStore } from '@/stores/messengerStore'
 import ChatSidebar from '@/components/ChatSidebar.vue'
 import ChatWindow  from '@/components/ChatWindow.vue'
@@ -52,9 +53,8 @@ import CallModal from '@/components/CallModal.vue'
 import GlobalAudioPlayer from '@/components/GlobalAudioPlayer.vue'
 import UserProfileModal from '@/components/UserProfileModal.vue'
 import EditProfileModal from '@/components/EditProfileModal.vue'
-import { ref } from 'vue'
-
 const store = useMessengerStore()
+const router = useRouter()
 const isEditProfileOpen = ref(false)
 
 const onKeyDown = (e: KeyboardEvent) => {
@@ -69,6 +69,7 @@ const onKeyDown = (e: KeyboardEvent) => {
       store.closeProfile()
     } else if (store.activeChatId) {
       store.activeChatId = null
+      router.push('/')
     }
   }
 }

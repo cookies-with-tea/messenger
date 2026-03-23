@@ -45,7 +45,12 @@
       </template>
 		</DynamicScroller>
 
-		<MessageInput @send="handleSend" @typing="messenger.sendTyping(true)" @stop-typing="messenger.sendTyping(false)" />
+		<MessageInput 
+      ref="messageInput"
+      @send="handleSend" 
+      @typing="messenger.sendTyping(true)" 
+      @stop-typing="messenger.sendTyping(false)" 
+    />
 
     <ImageZoomModal 
       :src="messenger.imageZoomSrc" 
@@ -56,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from "vue";
+import { ref, computed, watch, nextTick, onMounted } from "vue";
 import { useMessengerStore } from "@/stores/messengerStore";
 import type { MessageResponseDTO } from "@/types";
 import ChatHeader from "./ChatHeader.vue";
@@ -67,6 +72,9 @@ import ImageZoomModal from "./ImageZoomModal.vue";
 
 const messenger = useMessengerStore();
 const scroller = ref<any>();
+const messageInput = ref<any>();
+const allLoaded = ref(false);
+let lastFetchedOldestUuid: string | null = null;
 
 const typingUsers = computed(() => (messenger.activeChatId ? messenger.typingUsersFor(messenger.activeChatId) : []));
 
@@ -130,12 +138,12 @@ function scrollToBottom() {
 	nextTick(() => {
 		if (scroller.value) {
 			scroller.value.scrollToBottom();
+      // Multi-stage fallback for virtual scroller layout
+      setTimeout(() => scroller.value?.scrollToBottom(), 50);
+      setTimeout(() => scroller.value?.scrollToBottom(), 200);
 		}
 	});
 }
-
-const allLoaded = ref(false);
-let lastFetchedOldestUuid: string | null = null;
 
 // Load older messages on scroll to top
 async function onScroll() {
@@ -157,27 +165,44 @@ async function onScroll() {
 	}
 }
 
+// Lifecycle and Watchers
+onMounted(() => {
+  scrollToBottom();
+  messageInput.value?.focus();
+});
+
+// Watch for chat changes
 watch(() => messenger.activeChatId, () => {
 	lastFetchedOldestUuid = null;
 	allLoaded.value = false;
+  scrollToBottom();
+  messageInput.value?.focus();
 });
 
 watch(
-	() => messenger.activeChatId,
-	(v) => {
-		if (v) scrollToBottom();
-	},
-	{ immediate: true },
+  () => messenger.messagesLoading,
+  (loading) => {
+    if (!loading && messenger.activeMessages.length > 0) {
+      scrollToBottom();
+    }
+  }
 );
 
 watch(
-	() => messenger.activeMessages.length,
-	() => scrollToBottom(),
+  () => messenger.activeMessages.length,
+  (newVal, oldVal) => {
+    // Scroll if it's the first batch or if a new message is added to the end
+    if (oldVal === 0 || (newVal > oldVal && !messenger.messagesLoading)) {
+      scrollToBottom();
+    }
+  }
 );
 
 watch(
 	() => typingUsers.value.length,
-	() => scrollToBottom(),
+	(newVal, oldVal) => {
+    if (newVal > oldVal) scrollToBottom();
+  }
 );
 
 function handleSend(text: string) {

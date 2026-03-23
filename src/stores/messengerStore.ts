@@ -448,7 +448,10 @@ export const useMessengerStore = defineStore("messenger", () => {
 			
 			if (beforeUuid) {
 				const existing = messages.value.get(chatUuid) ?? [];
-				messages.value.set(chatUuid, [...incoming, ...existing]);
+				// Ensure no duplicates by checking UUIDs
+				const existingIds = new Set(existing.map(m => m.uuid));
+				const uniqueIncoming = incoming.filter(m => !existingIds.has(m.uuid));
+				messages.value.set(chatUuid, [...uniqueIncoming, ...existing]);
 			} else {
 				messages.value.set(chatUuid, incoming);
 				loadedChats.value.add(chatUuid);

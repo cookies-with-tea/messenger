@@ -27,7 +27,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import AppImage from './ui/AppImage.vue'
-import type { ChatResponseDTO, UserPreviewDTO } from '@/types'
+// import type { ChatResponseDTO, UserPreviewDTO } from '@/types'
 
 const props = defineProps<{ 
   chat?: any // Can be ChatResponseDTO or UserPreviewDTO
@@ -40,12 +40,12 @@ const size = computed(() => props.size ?? 36)
 const isUser = computed(() => !!props.chat?.uuid && ('first_name' in props.chat))
 
 const avatarUrl = computed(() => {
-  if (isUser.value) return props.chat?.avatar?.url
-  return props.chat?.avatar?.url || props.chat?.avatar // Fallback for old string format if any
+  if (typeof props.chat?.avatar === 'string') return props.chat.avatar
+  return props.chat?.avatar?.url
 })
 
 const avatarAlt = computed(() => props.chat?.avatar?.alt || '')
-const avatarTitle = computed(() => props.chat?.avatar?.title || '')
+// const avatarTitle = computed(() => props.chat?.avatar?.title || '')
 
 const isOnline = computed(() => props.chat?.is_online ?? false)
 

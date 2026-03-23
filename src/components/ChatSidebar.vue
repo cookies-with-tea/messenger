@@ -148,9 +148,9 @@ const confirmLogout = () => {
         </div>
         
         <div class="flex-1 min-w-0">
-          <div class="text-[8px] sm:text-[9px] font-mono text-muted uppercase tracking-wider mb-0.5">Host</div>
+          <!-- <div class="text-[8px] sm:text-[9px] font-mono text-muted uppercase tracking-wider mb-0.5">Host</div> -->
           <div class="text-[11px] sm:text-xs font-mono text-text-bright truncate font-bold uppercase tracking-tight">
-            {{ messenger.currentUserProfile ? `${messenger.currentUserProfile.first_name || ''} ${messenger.currentUserProfile.second_name || ''}`.trim() : (messenger.currentUserProfileLoading ? 'Loading...' : 'Scanning...') }}
+            {{ messenger.currentUserProfile ? (`${messenger.currentUserProfile.first_name || ''} ${messenger.currentUserProfile.second_name || ''}`.trim() || messenger.currentUserProfile.email) : (messenger.currentUserProfileLoading ? 'Loading profile...' : 'Guest') }}
           </div>
         </div>
 

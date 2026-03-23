@@ -182,6 +182,12 @@ function handleGifSelect(md: string) {
   emit('send', md)
   showGif.value = false
 }
+
+defineExpose({
+  focus: () => {
+    nextTick(() => inputRef.value?.focus())
+  }
+})
 </script>
 
 <template>
