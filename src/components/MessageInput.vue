@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useMessengerStore } from '@/stores/messengerStore'
 import VoiceRecorder from './VoiceRecorder.vue'
 import GifPicker from './GifPicker.vue'
@@ -18,6 +18,7 @@ const emit = defineEmits<{
 const text = ref('')
 const showEmoji = ref(false)
 const showGif = ref(false)
+const showAttachMenu = ref(false)
 const pickerMode = ref<'gif' | 'sticker'>('gif')
 const inputRef = ref<HTMLTextAreaElement>()
 const fileInput = ref<HTMLInputElement>()
@@ -80,6 +81,13 @@ const formattingItems = computed(() => [
   { label: 'Monospace', action: () => formatText('monospace') },
   { label: 'Code Block', action: () => formatText('code') },
 ])
+
+const attachItems = [
+  { id: 'file', label: 'File', icon: '📎', description: 'Photo, Video, Document', action: triggerFileSelect },
+  { id: 'emoji', label: 'Emoji', icon: '😀', description: 'Expression', action: () => { showEmoji.value = true; showAttachMenu.value = false; } },
+  { id: 'gif', label: 'GIF', icon: '🖼️', description: 'Animated', action: () => { openPicker('gif'); showAttachMenu.value = false; } },
+  { id: 'sticker', label: 'Sticker', icon: '✨', description: 'Collectibles', action: () => { openPicker('sticker'); showAttachMenu.value = false; } },
+]
 
 let typingTimer: ReturnType<typeof setTimeout> | null = null
 let isTypingActive = false
@@ -159,6 +167,7 @@ function handleVoiceSend(blob: Blob) {
 
 function triggerFileSelect() {
   fileInput.value?.click()
+  showAttachMenu.value = false
 }
 
 function handleFileChange(e: Event) {
@@ -182,6 +191,24 @@ function handleGifSelect(md: string) {
   emit('send', md)
   showGif.value = false
 }
+
+// Click outside to close attach menu
+const handleGlobalClick = (e: MouseEvent) => {
+  if (showAttachMenu.value) {
+    const target = e.target as HTMLElement
+    if (!target.closest('.attach-menu-container')) {
+      showAttachMenu.value = false
+    }
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('click', handleGlobalClick)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('click', handleGlobalClick)
+})
 
 defineExpose({
   focus: () => {
@@ -231,56 +258,55 @@ defineExpose({
     </div>
 
     <div class="flex items-end gap-3 px-5 py-5 z-20">
-      <!-- File button -->
-      <button
-        @click="triggerFileSelect"
-        class="shrink-0 p-2.5 rounded-xl text-text-dim hover:text-blue-400 hover:bg-blue-400/10 border border-transparent hover:border-blue-400/20 transition-all group"
-      >
-        <svg class="w-5 h-5 group-hover:rotate-12 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-        </svg>
+      <!-- Consolidated Attach Button -->
+      <div class="relative attach-menu-container">
+        <button
+          @click="showAttachMenu = !showAttachMenu"
+          class="shrink-0 p-2.5 rounded-xl text-text-dim hover:text-pulse hover:bg-pulse/10 border border-transparent hover:border-pulse/20 transition-all group flex items-center justify-center"
+          :class="{ 'rotate-45 text-pulse bg-pulse/10 border-pulse/20': showAttachMenu }"
+        >
+          <svg class="w-5 h-5 transition-transform duration-300" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+          </svg>
+        </button>
+
+        <Transition name="menu-pop">
+          <div
+            v-if="showAttachMenu"
+            class="absolute bottom-16 left-0 w-64 glass-heavy rounded-2xl border border-white/10 shadow-2xl overflow-hidden py-1.5 animate-in slide-in-from-bottom-5 duration-200"
+          >
+            <button
+              v-for="item in attachItems"
+              :key="item.id"
+              @click="item.action"
+              class="w-full px-4 py-3 flex items-center gap-4 hover:bg-white/5 transition-all text-left group"
+            >
+              <span class="text-xl group-hover:scale-125 transition-transform duration-300">{{ item.icon }}</span>
+              <div class="flex flex-col">
+                <span class="text-xs font-black uppercase tracking-widest text-text-bright">{{ item.label }}</span>
+                <span class="text-[9px] font-mono text-muted uppercase tracking-tighter">{{ item.description }}</span>
+              </div>
+            </button>
+          </div>
+        </Transition>
+
         <input ref="fileInput" type="file" class="hidden" @change="handleFileChange" />
-      </button>
-
-      <!-- Emoji button -->
-      <button
-        @click="showEmoji = !showEmoji"
-        class="shrink-0 p-2.5 rounded-xl text-text-dim hover:text-pulse hover:bg-pulse/10 border border-transparent hover:border-pulse/20 transition-all group"
-      >
-        <svg class="w-5 h-5 group-hover:scale-110 transition-transform" viewBox="0 0 20 20" fill="currentColor">
-          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-.464 5.535a1 1 0 10-1.415-1.414 3 3 0 01-4.242 0 1 1 0 00-1.415 1.414 5 5 0 007.072 0z" clip-rule="evenodd"/>
-        </svg>
-      </button>
-
-      <!-- GIF button -->
-      <button
-        @click="openPicker('gif')"
-        class="shrink-0 p-2.5 rounded-xl text-text-dim hover:text-ember hover:bg-ember/10 border border-transparent hover:border-ember/20 transition-all group"
-        title="GIFs"
-      >
-        <span class="text-[10px] font-black group-hover:scale-110 transition-transform">GIF</span>
-      </button>
-
-      <!-- Sticker button -->
-      <button
-        @click="openPicker('sticker')"
-        class="shrink-0 p-2.5 rounded-xl text-text-dim hover:text-ember hover:bg-ember/10 border border-transparent hover:border-ember/20 transition-all group"
-        title="Stickers"
-      >
-        <span class="text-lg leading-none group-hover:scale-110 transition-transform">✨</span>
-      </button>
-
-      <!-- GIF/Sticker picker -->
-      <div v-if="showGif" class="absolute bottom-24 left-6 z-30">
-        <GifPicker :initial-mode="pickerMode" @select="handleGifSelect" @close="showGif = false" />
       </div>
 
-      <!-- Emoji picker -->
+      <!-- Emoji picker overlay -->
       <Transition name="emoji-pop">
         <div
           v-if="showEmoji"
           class="absolute bottom-24 left-6 z-30 grid grid-cols-4 sm:grid-cols-8 gap-1 p-4 glass-heavy border border-white/10 rounded-2xl shadow-2xl backdrop-blur-3xl"
         >
+          <div class="col-span-4 sm:col-span-8 flex justify-between items-center mb-2 px-1">
+            <span class="text-[9px] font-mono font-black text-pulse uppercase tracking-widest">Select Emotion</span>
+            <button @click="showEmoji = false" class="text-muted hover:text-white transition-colors">
+              <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+              </svg>
+            </button>
+          </div>
           <button
             v-for="e in EMOJIS"
             :key="e"
@@ -289,6 +315,11 @@ defineExpose({
           >{{ e }}</button>
         </div>
       </Transition>
+
+      <!-- GIF/Sticker picker overlay -->
+      <div v-if="showGif" class="absolute bottom-24 left-6 z-30">
+        <GifPicker :initial-mode="pickerMode" @select="handleGifSelect" @close="showGif = false" />
+      </div>
 
       <!-- Text area -->
       <div class="flex-1 relative">
@@ -349,5 +380,17 @@ defineExpose({
 .emoji-pop-enter-from, .emoji-pop-leave-to {
   opacity: 0;
   transform: translateY(12px) scale(0.9);
+}
+
+.menu-pop-enter-active {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.menu-pop-leave-active {
+  transition: all 0.2s cubic-bezier(0.36, 0, 0.66, -0.56);
+}
+.menu-pop-enter-from, .menu-pop-leave-to {
+  opacity: 0;
+  transform: scale(0.8) translateY(20px);
+  filter: blur(8px);
 }
 </style>
