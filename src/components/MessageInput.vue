@@ -5,7 +5,7 @@ import VoiceRecorder from './VoiceRecorder.vue'
 import GifPicker from './GifPicker.vue'
 import ContextMenu from './ui/ContextMenu.vue'
 
-const store = useMessengerStore()
+const messenger = useMessengerStore()
 
 const EMOJIS = ['😀','😂','🥹','😎','🤔','🚀','💡','🔥','❤️','👍','👎','🎉','⚡','🌊','🎮','🎨','💻','🤖','👾','⭐','✨','🎯','📱','🏆']
 
@@ -98,13 +98,13 @@ const textareaHeight = computed(() => {
 })
 
 const replySender = computed(() => {
-  const msg = store.replyingToMessage
+  const msg = messenger.replyingToMessage
   if (!msg) return ''
   return msg.sender?.first_name || 'User'
 })
 
 // Watch for edit mode
-watch(() => store.editingMessage, (newMsg) => {
+watch(() => messenger.editingMessage, (newMsg) => {
   if (newMsg) {
     text.value = newMsg.body
     nextTick(() => inputRef.value?.focus())
@@ -114,7 +114,7 @@ watch(() => store.editingMessage, (newMsg) => {
 })
 
 // Focus when replying
-watch(() => store.replyingToMessage, (newMsg) => {
+watch(() => messenger.replyingToMessage, (newMsg) => {
   if (newMsg) {
     nextTick(() => inputRef.value?.focus())
   }
@@ -136,9 +136,9 @@ function submit() {
   const t = text.value.trim()
   if (!t) return
 
-  if (store.editingMessage) {
-    store.editMessage(store.editingMessage.uuid, t)
-    store.editingMessage = null
+  if (messenger.editingMessage) {
+    messenger.editMessage(messenger.editingMessage.uuid, t)
+    messenger.editingMessage = null
   } else {
     emit('send', t)
   }
@@ -151,7 +151,7 @@ function submit() {
 }
 
 function closeEdit() {
-  store.editingMessage = null
+  messenger.editingMessage = null
   text.value = ''
 }
 
@@ -162,7 +162,7 @@ function insertEmoji(emoji: string) {
 }
 
 function handleVoiceSend(blob: Blob) {
-  store.sendVoiceMessage(blob)
+  messenger.sendVoiceMessage(blob)
 }
 
 function triggerFileSelect() {
@@ -173,7 +173,7 @@ function triggerFileSelect() {
 function handleFileChange(e: Event) {
   const files = (e.target as HTMLInputElement).files
   if (files && files[0]) {
-    store.sendFileMessage(files[0])
+    messenger.sendFileMessage(files[0])
     if (fileInput.value) fileInput.value.value = ''
   }
 }
@@ -222,17 +222,17 @@ defineExpose({
     
     <!-- Reply Preview Area -->
     <div 
-      v-if="store.replyingToMessage" 
+      v-if="messenger.replyingToMessage" 
       class="px-5 py-2.5 flex items-center justify-between bg-white/5 border-b border-white/5 animate-in slide-in-from-bottom-2 duration-200"
     >
       <div class="flex items-center gap-3 overflow-hidden">
         <div class="w-1 h-8 bg-blue-500 rounded-full"></div>
         <div class="flex flex-col min-w-0">
           <span class="text-[10px] font-mono font-black uppercase tracking-tight text-blue-400">Replying to {{ replySender }}</span>
-          <span class="text-[11px] font-mono text-text-dim truncate">{{ store.replyingToMessage.body }}</span>
+          <span class="text-[11px] font-mono text-text-dim truncate">{{ messenger.replyingToMessage.body }}</span>
         </div>
       </div>
-      <button @click="store.replyingToMessage = null" class="p-1 hover:bg-white/10 rounded-lg text-text-dim">
+      <button @click="messenger.replyingToMessage = null" class="p-1 hover:bg-white/10 rounded-lg text-text-dim">
         <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
           <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
         </svg>
@@ -241,7 +241,7 @@ defineExpose({
 
     <!-- Edit Mode Indicator -->
     <div 
-      v-if="store.editingMessage" 
+      v-if="messenger.editingMessage" 
       class="px-5 py-2.5 flex items-center justify-between bg-pulse/10 border-b border-pulse/20 animate-in slide-in-from-bottom-2 duration-200"
     >
       <div class="flex items-center gap-3">
@@ -331,7 +331,7 @@ defineExpose({
           @input="handleInput"
           @contextmenu="handleInputContextMenu"
           rows="1"
-          :placeholder="store.editingMessage ? 'Update message...' : 'Broadcast message...'"
+          :placeholder="messenger.editingMessage ? 'Update message...' : 'Broadcast message...'"
           class="w-full bg-white/3 border border-white/5 rounded-2xl px-5 py-3.5 text-sm text-text-bright placeholder:text-muted outline-none focus:border-pulse/40 focus:bg-white/5 resize-none transition-all font-mono leading-relaxed overflow-hidden shadow-inner"
           :style="{ height: textareaHeight }"
         />
@@ -339,7 +339,7 @@ defineExpose({
 
       <!-- Voice Recorder -->
       <VoiceRecorder 
-        v-if="!text.trim() && !store.editingMessage"
+        v-if="!text.trim() && !messenger.editingMessage"
         @send="handleVoiceSend"
         class="shrink-0"
       />
@@ -355,7 +355,7 @@ defineExpose({
           : 'bg-white/5 text-muted border border-white/5 cursor-not-allowed'"
       >
         <svg class="w-5 h-5 group-hover:translate-x-0.5 transition-transform" viewBox="0 0 20 20" fill="currentColor">
-          <path v-if="store.editingMessage" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
+          <path v-if="messenger.editingMessage" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
           <path v-else d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z"/>
         </svg>
       </button>

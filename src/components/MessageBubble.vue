@@ -40,8 +40,8 @@ const props = defineProps<{
 
 const emit = defineEmits(['image-click'])
 
-const store = useMessengerStore()
-const isOwn = computed(() => props.message.sender_uuid === store.currentUserId)
+const messenger = useMessengerStore()
+const isOwn = computed(() => props.message.sender_uuid === messenger.currentUserId)
 
 const showMenu = ref(false)
 const menuX = ref(0)
@@ -62,7 +62,7 @@ const scrollToReply = () => {
 }
 
 const toggleReaction = (emoji: string) => {
-  store.sendReaction(props.message.uuid, emoji)
+  messenger.sendReaction(props.message.uuid, emoji)
 }
 
 const QUICK_REACTIONS = ['👍', '❤️', '🔥', '😂', '😮', '😢']
@@ -72,14 +72,14 @@ const menuItems = computed(() => {
     { 
       label: 'Reply', 
       icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5"/></svg>', 
-      action: () => { store.replyingToMessage = props.message } 
+      action: () => { messenger.replyingToMessage = props.message } 
     },
     {
       label: props.message.is_pinned ? 'Unpin' : 'Pin',
       icon: props.message.is_pinned 
         ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>' 
         : '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5h14M12 5v14m-7 0h14"/></svg>',
-      action: () => { store.togglePinMessage(props.message.uuid, !props.message.is_pinned) }
+      action: () => { messenger.togglePinMessage(props.message.uuid, !props.message.is_pinned) }
     }
   ]
 
@@ -88,14 +88,14 @@ const menuItems = computed(() => {
       items.push({ 
         label: 'Edit', 
         icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>', 
-        action: () => { store.editingMessage = props.message } 
+        action: () => { messenger.editingMessage = props.message } 
       })
     }
     items.push({ 
       label: 'Delete', 
       icon: '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>', 
       variant: 'danger',
-      action: () => { store.deleteMessage(props.message.uuid) } 
+      action: () => { messenger.deleteMessage(props.message.uuid) } 
     })
   }
 
@@ -137,7 +137,7 @@ const reactionsGrouped = computed(() => {
     const group = groups[r.emoji]
     if (group) {
       group.count++
-      if (r.user_uuid === store.currentUserId) group.me = true
+      if (r.user_uuid === messenger.currentUserId) group.me = true
     }
   })
   
@@ -179,7 +179,7 @@ const statusClass = computed(() => ({
           :chat="message.sender" 
           :size="32" 
           class="cursor-pointer hover:scale-110 transition-transform"
-          @click="store.openProfile(message.sender_uuid)"
+          @click="messenger.openProfile(message.sender_uuid)"
         />
       </div>
     </div>
@@ -307,15 +307,17 @@ const statusClass = computed(() => ({
       </div>
     </div>
     
-    <ContextMenu
-      v-if="showMenu"
-      :items="menuItems"
-      :emojis="QUICK_REACTIONS"
-      :x="menuX"
-      :y="menuY"
-      @emoji="toggleReaction"
-      @close="showMenu = false"
-    />
+    <Teleport to="body">
+      <ContextMenu
+        v-if="showMenu"
+        :items="menuItems"
+        :emojis="QUICK_REACTIONS"
+        :x="menuX"
+        :y="menuY"
+        @emoji="toggleReaction"
+        @close="showMenu = false"
+      />
+    </Teleport>
 
     <ReadReceiptsModal
       v-if="isReceiptsModalOpen"

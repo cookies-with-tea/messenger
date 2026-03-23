@@ -7,10 +7,10 @@ import ChatAvatar from './ChatAvatar.vue'
 import SharedMediaView from './SharedMediaView.vue'
 
 const emit = defineEmits(['openEdit'])
-const messengerStore = useMessengerStore()
+const messenger = useMessengerStore()
 const callStore = useCallStore()
 
-const { selectedProfile, isProfileModalOpen, profileLoading, chats, mediaCounts, now, currentUserId } = storeToRefs(messengerStore)
+const { selectedProfile, isProfileModalOpen, profileLoading, chats, mediaCounts, now, currentUserId } = storeToRefs(messenger)
 
 const isMe = computed(() => selectedProfile.value?.uuid === currentUserId.value)
 
@@ -48,13 +48,13 @@ const savingAlias = ref(false)
 watch(() => directChat.value, (chat) => {
   newAlias.value = chat?.alias || ''
   if (chat && isProfileModalOpen.value) {
-    messengerStore.fetchMediaCounts(chat.uuid)
+    messenger.fetchMediaCounts(chat.uuid)
   }
 }, { immediate: true })
 
 watch(() => isProfileModalOpen.value, (isOpen) => {
   if (isOpen && directChat.value) {
-    messengerStore.fetchMediaCounts(directChat.value.uuid)
+    messenger.fetchMediaCounts(directChat.value.uuid)
   } else if (!isOpen) {
     activeMediaType.value = null
   }
@@ -69,14 +69,14 @@ const counts = computed(() => {
 function showMedia(type: 'image' | 'video' | 'audio') {
   if (!directChat.value) return
   activeMediaType.value = type
-  messengerStore.fetchSharedMedia(directChat.value.uuid, type)
+  messenger.fetchSharedMedia(directChat.value.uuid, type)
 }
 
 async function saveAlias() {
   if (!directChat.value) return
   savingAlias.value = true
   try {
-    await messengerStore.updateContactAlias(directChat.value.uuid, newAlias.value || null)
+    await messenger.updateContactAlias(directChat.value.uuid, newAlias.value || null)
   } finally {
     savingAlias.value = false
   }
@@ -105,10 +105,10 @@ function startDirectChat() {
       c.sender?.uuid === selectedProfile.value?.uuid
     )
     if (existing) {
-      messengerStore.selectChat(existing.uuid)
-      messengerStore.closeProfile()
+      messenger.selectChat(existing.uuid)
+      messenger.closeProfile()
     } else {
-      messengerStore.closeProfile()
+      messenger.closeProfile()
     }
   }
 }
@@ -121,7 +121,7 @@ function callUser() {
     )
     if (existing) {
       callStore.startCall(existing.uuid)
-      messengerStore.closeProfile()
+      messenger.closeProfile()
     }
   }
 }
@@ -139,7 +139,7 @@ function callUser() {
     <div
       v-if="isProfileModalOpen"
       class="fixed inset-0 z-100 flex items-center justify-center p-4 bg-void/60 backdrop-blur-md"
-      @click.self="messengerStore.closeProfile"
+      @click.self="messenger.closeProfile"
     >
       <Transition
         enter-active-class="transition duration-300 ease-out"
@@ -156,7 +156,7 @@ function callUser() {
           <!-- Sticky Header for Close Button -->
           <div class="sticky top-0 z-50 p-4 flex justify-end pointer-events-none">
              <button
-                @click="messengerStore.closeProfile"
+                @click="messenger.closeProfile"
                 class="p-2 rounded-full bg-void/40 backdrop-blur-md text-text-dim hover:text-text-bright hover:bg-void/60 transition-all border border-white/5 pointer-events-auto"
               >
                 <svg class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
@@ -221,7 +221,10 @@ function callUser() {
                 </div>
 
                 <!-- Action Buttons -->
-                <div class="w-full mt-8 grid grid-cols-2 gap-3">
+                <div 
+                  class="w-full mt-8 grid gap-3"
+                  :class="isMe ? 'grid-cols-1' : 'grid-cols-2'"
+                >
                   <button
                     @click="startDirectChat"
                     class="flex items-center justify-center gap-2 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-text-bright font-bold text-xs uppercase transition-all"
@@ -229,6 +232,7 @@ function callUser() {
                     <span>Message</span>
                   </button>
                   <button
+                    v-if="!isMe"
                     @click="callUser"
                     class="flex items-center justify-center gap-2 py-3 rounded-2xl bg-ember/20 hover:bg-ember/30 text-ember font-bold text-xs uppercase transition-all"
                   >
