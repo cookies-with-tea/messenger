@@ -32,17 +32,17 @@ use crate::messenger::application::message_service::MessageService;
 pub async fn get_messages(
     State(state): State<Arc<AppState>>,
     Path(chat_uuid): Path<Uuid>,
-    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+    axum::extract::Query(params): axum::extract::Query<crate::messenger::dto::MessageQuery>,
 ) -> impl IntoResponse {
-    let page = params.get("page").and_then(|p| p.parse().ok()).unwrap_or(1);
-    let limit = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(20);
-    let before = params.get("before").and_then(|b| Uuid::parse_str(b).ok());
+    let page = params.page.unwrap_or(1);
+    let limit = params.limit.unwrap_or(20);
+    let before_uuid = params.before_uuid;
 
     let repo = Arc::new(PostgresMessengerRepository::new(state.pool.clone())) as Arc<dyn MessageRepository>;
     let chat_repo = Arc::new(PostgresMessengerRepository::new(state.pool.clone())) as Arc<dyn ChatRepository>;
     let service = MessageService::new(repo, chat_repo, state.user_ws_state.clone().map(Arc::new), state.media_base_url.clone());
 
-    match service.get_messages(chat_uuid, limit, page, before).await {
+    match service.get_messages(chat_uuid, limit, page, before_uuid).await {
         Ok((messages, total)) => {
             let total_pages = (total as f64 / limit as f64).ceil() as i32;
             let pagination = PaginationDTO {
