@@ -29,7 +29,7 @@ pub trait MessageRepository: Send + Sync {
     async fn create(&self, chat_uuid: Uuid, sender_uuid: Uuid, reply_to_uuid: Option<Uuid>, body: &str, media_uuid: Option<Uuid>) -> Result<MessageRow, sqlx::Error>;
     async fn update_body(&self, uuid: Uuid, body: &str) -> Result<Option<MessageRow>, sqlx::Error>;
     async fn delete(&self, uuid: Uuid) -> Result<u64, sqlx::Error>;
-    async fn upsert_statuses(&self, chat_uuid: Uuid, user_uuid: Uuid, status: DeliveryStatus) -> Result<(), sqlx::Error>;
+    async fn upsert_statuses(&self, chat_uuid: Uuid, user_uuid: Uuid, status: DeliveryStatus) -> Result<Option<(Uuid, i64, i64)>, sqlx::Error>;
     async fn add_reaction(&self, message_uuid: Uuid, user_uuid: Uuid, emoji: &str) -> Result<bool, sqlx::Error>;
     async fn get_reactions(&self, message_uuid: Uuid) -> Result<Vec<ReactionDTO>, sqlx::Error>;
     async fn find_by_uuid(&self, uuid: Uuid) -> Result<Option<MessageRow>, sqlx::Error>;

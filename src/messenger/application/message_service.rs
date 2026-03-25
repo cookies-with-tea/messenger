@@ -274,25 +274,48 @@ impl MessageService {
         chat_uuid: Uuid,
         user_uuid: Uuid,
     ) -> Result<(), sqlx::Error> {
-        self.repo
+        let res = self.repo
             .upsert_statuses(chat_uuid, user_uuid, DeliveryStatus::Delivered)
             .await?;
-        // Broadcast status update (this might be too noisy if done for every message,
-        // usually we sending it per chat or for last message)
-        // For now, let's just stick to the basic implementation.
+        
+        if let (Some(ws), Some((message_uuid, read_count, delivered_count))) = (&self.ws, res) {
+            if let Ok(members) = self.chat_repo.get_member_uuids(chat_uuid).await {
+                ws.broadcast_to_users(
+                    &members,
+                    WsServerEvent::StatusUpdated {
+                        chat_uuid,
+                        message_uuid,
+                        user_uuid,
+                        status: DeliveryStatus::Delivered,
+                        read_count: Some(read_count),
+                        delivered_count: Some(delivered_count),
+                    },
+                )
+                .await;
+            }
+        }
         Ok(())
     }
 
     pub async fn mark_read(&self, chat_uuid: Uuid, user_uuid: Uuid) -> Result<(), sqlx::Error> {
-        self.repo
+        let res = self.repo
             .upsert_statuses(chat_uuid, user_uuid, DeliveryStatus::Read)
             .await?;
-        if let Some(ws) = &self.ws {
+        
+        if let (Some(ws), Some((message_uuid, read_count, delivered_count))) = (&self.ws, res) {
             if let Ok(members) = self.chat_repo.get_member_uuids(chat_uuid).await {
-                // Simplified: we send a general status update.
-                // Ideally we'd need to know which messages were marked read.
-                // But the WsServerEvent::StatusUpdated requires message_uuid.
-                // For direct DDD port, let's see what WsServerEvent expects.
+                ws.broadcast_to_users(
+                    &members,
+                    WsServerEvent::StatusUpdated {
+                        chat_uuid,
+                        message_uuid,
+                        user_uuid,
+                        status: DeliveryStatus::Read,
+                        read_count: Some(read_count),
+                        delivered_count: Some(delivered_count),
+                    },
+                )
+                .await;
             }
         }
         Ok(())

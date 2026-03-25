@@ -447,7 +447,8 @@ impl MessageRepository for PostgresMessengerRepository {
         .map(|r| r.rows_affected())
     }
 
-    async fn upsert_statuses(&self, chat_uuid: Uuid, user_uuid: Uuid, status: DeliveryStatus) -> Result<(), sqlx::Error> {
+    async fn upsert_statuses(&self, chat_uuid: Uuid, user_uuid: Uuid, status: DeliveryStatus) -> Result<Option<(Uuid, i64, i64)>, sqlx::Error> {
+        // 1. Upsert statuses for all unread/undelivered messages
         sqlx::query(
             r#"
             INSERT INTO message_status (message_uuid, user_uuid, status)
@@ -471,7 +472,28 @@ impl MessageRepository for PostgresMessengerRepository {
         .bind(status)
         .execute(&self.pool)
         .await?;
-        Ok(())
+
+        // 2. Find the latest message that was marked and get its counts
+        let res = sqlx::query_as::<_, (Uuid, i64, i64)>(
+            r#"
+            SELECT 
+                m.uuid,
+                (SELECT COUNT(*) FROM message_status WHERE message_uuid = m.uuid AND status = 'read') as read_count,
+                (SELECT COUNT(*) FROM message_status WHERE message_uuid = m.uuid AND status = 'delivered') as delivered_count
+            FROM message m
+            WHERE m.chat_uuid = $1 
+              AND m.sender_uuid <> $2
+              AND m.is_deleted = FALSE
+            ORDER BY m.created_at DESC
+            LIMIT 1
+            "#
+        )
+        .bind(chat_uuid)
+        .bind(user_uuid)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(res)
     }
 
     async fn add_reaction(&self, message_uuid: Uuid, user_uuid: Uuid, emoji: &str) -> Result<bool, sqlx::Error> {
