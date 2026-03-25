@@ -213,7 +213,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 
 				case "status_updated":
 				case "StatusUpdated":
-					_applyStatus(payload.chat_uuid, payload.user_uuid, payload.status);
+					_applyStatus(payload.chat_uuid, payload.user_uuid, payload.status, payload.message_uuid, payload.read_count, payload.delivered_count);
 					break;
 
 				case "message_pinned":
@@ -742,7 +742,7 @@ export const useMessengerStore = defineStore("messenger", () => {
 		}
 	}
 
-	function _applyStatus(chatUuid: string, userUuid: string, statusVal: DeliveryStatus) {
+	function _applyStatus(chatUuid: string, userUuid: string, statusVal: DeliveryStatus, msgUuid?: string, readCount?: number, delCount?: number) {
 		const list = messages.value.get(chatUuid);
 		if (!list) return;
 
@@ -757,14 +757,36 @@ export const useMessengerStore = defineStore("messenger", () => {
 			});
 		} 
 		// 2. Если КТО-ТО ДРУГОЙ прочитал (userUuid !== currentUserId)
-		// Обновляем counts для НАШИХ сообщений (упрощенно: считаем что прочитал всё)
 		else {
-			list.forEach((m) => {
-				if (m.sender_uuid === currentUserId.value) {
-					if (statusVal === "read") m.read_count = (m.read_count ?? 0) + 1;
-					else if (statusVal === "delivered") m.delivered_count = (m.delivered_count ?? 0) + 1;
+			// Если пришел конкретный message_uuid и новые счетчики — используем их (наиболее точный вариант)
+			if (msgUuid && (readCount !== undefined || delCount !== undefined)) {
+				const msg = list.find(m => m.uuid === msgUuid);
+				if (msg) {
+					if (readCount !== undefined) msg.read_count = readCount;
+					if (delCount !== undefined) msg.delivered_count = delCount;
+					
+					// Для Direct чатов: если один прочитал последний, то и все предыдущие прочитаны
+					const chat = chats.value.find(c => c.uuid === chatUuid);
+					if (chat?.chat_type === 'direct' && statusVal === 'read') {
+						list.forEach(m => {
+							if (m.sender_uuid === currentUserId.value) {
+								m.read_count = 1;
+							}
+						});
+					}
 				}
-			});
+			} 
+			// Фолбэк для обратной совместимости или если инфы мало
+			else {
+				list.forEach((m) => {
+					if (m.sender_uuid === currentUserId.value) {
+						if (statusVal === "read" && (m.read_count ?? 0) < 1) {
+							// В direct чате это ок, в групповом — пальцем в небо, но лучше чем бесконечный инкремент
+							m.read_count = (m.read_count ?? 0) + 1;
+						}
+					}
+				});
+			}
 		}
 	}
 

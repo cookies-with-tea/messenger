@@ -124,7 +124,7 @@ export type WsServerEvent =
   | { event: 'new_message';     payload: MessageResponseDTO }
   | { event: 'message_edited';  payload: MessageResponseDTO }
   | { event: 'message_deleted'; payload: { uuid: string; chat_uuid: string } }
-  | { event: 'status_updated';  payload: { chat_uuid: string; message_uuid: string; user_uuid: string; status: DeliveryStatus } }
+  | { event: 'status_updated';  payload: { chat_uuid: string; message_uuid: string; user_uuid: string; status: DeliveryStatus; read_count?: number; delivered_count?: number } }
   | { event: 'message_pinned';  payload: { uuid: string; chat_uuid: string; is_pinned: boolean } }
   | { event: 'typing';          payload: { chat_uuid: string; user_uuid: string; is_typing: boolean } }
   | { event: 'member_joined';   payload: ChatMemberDTO }
