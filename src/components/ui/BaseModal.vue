@@ -8,7 +8,7 @@
       leave-from-class="opacity-100 scale-100"
       leave-to-class="opacity-0 scale-95"
     >
-      <div v-if="props.show" class="fixed inset-0 z-100 flex items-center justify-center p-4 min-h-screen">
+      <div v-if="props.show" class="fixed inset-0 z-100 flex items-center justify-center p-4 min-h-dvh">
         <!-- Backdrop -->
         <div class="absolute inset-0 bg-void/60 backdrop-blur-sm" @click="$emit('close')"></div>
         

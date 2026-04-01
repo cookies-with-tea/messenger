@@ -1,5 +1,5 @@
 <template>
-  <div class="auth-layout min-h-screen bg-void flex items-center justify-center p-4 relative overflow-hidden">
+  <div class="auth-layout min-h-dvh bg-void flex items-center justify-center p-4 relative overflow-hidden">
     <!-- Background glow -->
     <div class="absolute inset-0 pointer-events-none">
       <div class="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-pulse/5 rounded-full blur-3xl" />

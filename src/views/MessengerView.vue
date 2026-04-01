@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-screen overflow-hidden bg-void text-text-base font-syne antialiased relative">
+  <div class="flex h-dvh overflow-hidden bg-void text-text-base font-syne antialiased relative">
     <!-- Cosmic Background Layer -->
     <div class="starfield-container">
       <div class="stars-1"></div>
